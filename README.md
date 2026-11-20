@@ -129,8 +129,10 @@ build.bat
 **פרסום גרסה**
 
 1. מעלים את `VERSION` ב־`core.py`, למשל ל־`1.2.0`.
-2. מריצים `build.bat release`. הסקריפט בונה ומפרסם GitHub Release בשם `v1.2.0`, באמצעות `gh`.
+2. עושים push ל־`main`. ה־workflow ‏[`release.yml`](.github/workflows/release.yml) בונה את ההתקנה בשרתים של GitHub ומפרסם Release בשם `v1.2.0`. push שלא משנה את הגרסה לא מפרסם כלום.
 3. מי שהתקין את Burner יקבל הצעה לעדכן בפתיחה הבאה.
+
+אפשר גם לפרסם מהמחשב עם `build.bat release`, או להריץ את ה־workflow ידנית במצב **build only** כדי לבדוק בנייה בלי לפרסם.
 
 </details>
 

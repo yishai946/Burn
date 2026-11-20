@@ -1,0 +1,78 @@
+# Publishes a new Burner release when VERSION in core.py changes.
+# A push that doesn't bump VERSION (or bumps it to one already released) does nothing,
+# so friends only get an update prompt for real releases.
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths: [core.py]        # VERSION lives here
+  workflow_dispatch:        # "Run workflow" button: retry a failed release, or test the build
+    inputs:
+      build_only:
+        description: "Build and test only, don't publish (installer is attached to the run)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write           # create the release and upload the installer
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read version
+        id: ver
+        shell: pwsh
+        run: |
+          $v = (Select-String -Path core.py -Pattern '^VERSION = "(.+?)"').Matches[0].Groups[1].Value
+          "version=$v" >> $env:GITHUB_OUTPUT
+          gh release view "v$v" *> $null
+          $released = $LASTEXITCODE -eq 0
+          if ("${{ inputs.build_only }}" -eq "true") { "go=true" >> $env:GITHUB_OUTPUT; Write-Host "Test build of v$v (not published)" }
+          elseif ($released) { "go=false" >> $env:GITHUB_OUTPUT; Write-Host "v$v is already released: nothing to do." }
+          else { "go=true" >> $env:GITHUB_OUTPUT; Write-Host "Releasing v$v" }
+          exit 0
+
+      - uses: actions/setup-python@v5
+        if: steps.ver.outputs.go == 'true'
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install Python packages
+        if: steps.ver.outputs.go == 'true'
+        run: python -m pip install -r requirements.txt
+
+      - name: Get ffmpeg and Inno Setup
+        if: steps.ver.outputs.go == 'true'
+        shell: pwsh
+        run: |
+          Invoke-WebRequest https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip -OutFile ffmpeg.zip
+          Expand-Archive ffmpeg.zip -DestinationPath "$env:RUNNER_TEMP\ffmpeg"
+          $ff = (Get-ChildItem "$env:RUNNER_TEMP\ffmpeg" -Recurse -Filter ffmpeg.exe | Select-Object -First 1).FullName
+          "FF=$ff" >> $env:GITHUB_ENV
+          choco install innosetup -y --no-progress
+          "ISCC=${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" >> $env:GITHUB_ENV
+
+      - name: Build and publish
+        if: steps.ver.outputs.go == 'true'
+        shell: cmd
+        env:
+          PY: python
+        run: build.bat ${{ inputs.build_only && 'build' || 'release' }}
+
+      - name: Keep the installer from a test build
+        if: steps.ver.outputs.go == 'true' && inputs.build_only
+        uses: actions/upload-artifact@v4
+        with:
+          name: Burner-Setup
+          path: dist/Burner-Setup.exe
