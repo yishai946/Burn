@@ -3,6 +3,7 @@ import json
 import os
 import re
 import shutil
+import ssl
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
@@ -14,6 +15,11 @@ H = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36
 GAP = 2                # seconds of silence the CD format puts before each track
 DEFAULT_CAP = 79 * 60  # usable seconds on an "80 min" disc (1 min safety margin)
 NOWIN = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+try:  # Python's own CA list can miss current issuers (GitHub failed); certifi's bundle is kept current
+    import certifi
+    SSL = ssl.create_default_context(cafile=certifi.where())
+except ImportError:
+    SSL = ssl.create_default_context()
 VERSION = "1.1.0"             # bump for every release; build.bat tags the GitHub release with it
 REPO = "yishai946/Burn"        # GitHub repo whose releases the in-app updater checks
 FROZEN = getattr(sys, "frozen", False)  # running as the packaged Burner.exe
@@ -27,7 +33,7 @@ FFMPEG = os.path.join(RES, "ffmpeg.exe")  # bundled in the package; from source,
 # ---------- playlist scraping ----------
 def _get(url):
     url = urllib.parse.quote(url, safe=":/?&=%#@+~,;")  # Hebrew etc. in the path
-    return urllib.request.urlopen(urllib.request.Request(url, headers=H), timeout=20).read().decode("utf-8", "replace")
+    return urllib.request.urlopen(urllib.request.Request(url, headers=H), timeout=20, context=SSL).read().decode("utf-8", "replace")
 
 
 def _walk(o, out):

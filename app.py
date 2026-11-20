@@ -40,7 +40,7 @@ class Api:
         if urllib.parse.urlparse(url).hostname not in ("p.scdn.co", "audio-ssl.itunes.apple.com"):
             return None  # only known preview hosts; the page passes this URL in
         try:
-            r = urllib.request.urlopen(urllib.request.Request(url, headers=core.H), timeout=20)
+            r = urllib.request.urlopen(urllib.request.Request(url, headers=core.H), timeout=20, context=core.SSL)
             kind = r.headers.get_content_type() or "audio/mpeg"
             return f"data:{kind};base64," + base64.b64encode(r.read(5_000_000)).decode()
         except Exception:
@@ -77,7 +77,7 @@ class Api:
             return self._emit(phase="update_error", msg="קישור עדכון לא צפוי.")
         path = os.path.join(tempfile.gettempdir(), f"Burner-Setup-{info['version']}.exe")
         try:
-            with urllib.request.urlopen(urllib.request.Request(info["url"], headers=core.H), timeout=30) as r, open(path, "wb") as f:
+            with urllib.request.urlopen(urllib.request.Request(info["url"], headers=core.H), timeout=30, context=core.SSL) as r, open(path, "wb") as f:
                 got = 0
                 while chunk := r.read(1 << 20):
                     f.write(chunk)
@@ -196,6 +196,8 @@ if __name__ == "__main__" and "--selftest" in sys.argv:
         t = core.search_songs("maroon 5 memories")[0]
         print("SELFTEST search ok:", t["title"], "| youtube id:", core._find_video(t["artist"], t["title"], t["ms"]),
               "| ffmpeg bundled:", os.path.exists(core.FFMPEG), flush=True)
+        core.latest_release()  # raises if GitHub can't be reached (e.g. certificates)
+        print("SELFTEST update check ok", flush=True)
         tmp = tempfile.mkdtemp(prefix="burner_selftest_")
         p = core.download_track(t, os.path.join(tmp, "000"))
         print("SELFTEST download ok:", round(core.wav_seconds(p)), "s wav", flush=True)
