@@ -13,11 +13,11 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/yishai946/Burn/releases/latest/download/Burner-Setup.exe"><img src="https://img.shields.io/badge/הורדה_ל־Windows-Burner--Setup.exe-FF7A1A?style=for-the-badge&logo=windows&logoColor=white" alt="הורדה ל־Windows"></a>
+  <a href="https://github.com/yishai946/Burn/releases/latest/download/Burner-Setup.exe"><img src="https://img.shields.io/badge/Download_for_Windows-Burner--Setup.exe-FF7A1A?style=for-the-badge&logo=windows&logoColor=white" alt="הורדה ל־Windows"></a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/yishai946/Burn/releases/latest"><img src="https://img.shields.io/github/v/release/yishai946/Burn?color=FF7A1A&label=גרסה" alt="גרסה אחרונה"></a>
+  <a href="https://github.com/yishai946/Burn/releases/latest"><img src="https://img.shields.io/github/v/release/yishai946/Burn?color=FF7A1A&label=version" alt="גרסה אחרונה"></a>
   <img src="https://img.shields.io/badge/Windows-10%20%7C%2011-0078D4?logo=windows" alt="Windows 10 | 11">
 </p>
 
