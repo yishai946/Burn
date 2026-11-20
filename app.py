@@ -215,10 +215,19 @@ if __name__ == "__main__" and "--selftest" in sys.argv:
         print("SELFTEST failed:", repr(e), flush=True)
     sys.exit(0)
 
+def _drop_page_cache():
+    """pywebview serves index.html from a fixed local address, so WebView2's HTTP cache can keep
+    showing an old page after an update. Clear only that cache; localStorage (theme, tour) stays."""
+    base = os.path.join(os.environ.get("APPDATA", ""), "pywebview", "EBWebView", "Default")
+    for d in ("Cache", "Code Cache"):
+        shutil.rmtree(os.path.join(base, d), ignore_errors=True)
+
+
 if __name__ == "__main__":
     import ctypes
     if _focus_running_copy():
         sys.exit(0)
+    _drop_page_cache()  # only once we know no other copy is using it
     # own taskbar identity, so Windows doesn't group the window under python and its icon
     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("Burner.App")
     api = Api()
