@@ -1,0 +1,672 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Burner</title>
+<link rel="stylesheet" href="vendor/driver.css">
+<script src="vendor/driver.js.iife.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Assistant:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script>try { const t = localStorage.getItem('theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}</script>
+<style>
+:root{
+  --bg:#F6F5F2; --surface:#FFFFFF; --surface2:#FAFAF8; --line:#E6E4DF; --line2:#D6D3CC; --text:#18181B; --muted:#5F6670;
+  --accent:#F2701A; --on-accent:#1A0E04; --bar-off:#C9C6BF;
+  --ok:#1F8A55; --ok-bg:#E3F4EA; --warn:#A8520A; --warn-bg:#FDF0E1; --bad:#C2382E;
+}
+:root[data-theme="dark"]{
+  --bg:#0E1014; --surface:#171A21; --surface2:#13161C; --line:#232733; --line2:#2E3340; --text:#E8EAED; --muted:#9AA3AF;
+  --accent:#FF7A1A; --on-accent:#1A0E04; --bar-off:#4B5263;
+  --ok:#4ADE80; --ok-bg:#12291C; --warn:#FFB880; --warn-bg:#33210F; --bad:#EE6A60;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0E1014; --surface:#171A21; --surface2:#13161C; --line:#232733; --line2:#2E3340; --text:#E8EAED; --muted:#9AA3AF;
+  --accent:#FF7A1A; --on-accent:#1A0E04; --bar-off:#4B5263;
+  --ok:#4ADE80; --ok-bg:#12291C; --warn:#FFB880; --warn-bg:#33210F; --bad:#EE6A60;
+}}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%}
+body{background:var(--bg);color:var(--text);font:15px/1.45 Assistant,"Segoe UI",system-ui,sans-serif;
+  display:flex;flex-direction:column;-webkit-font-smoothing:antialiased}
+[hidden]{display:none!important}
+.mono{font-variant-numeric:tabular-nums}
+button{font:inherit;cursor:pointer;border:0;border-radius:12px;color:inherit;transition:opacity .15s,transform .05s}
+button:active{transform:scale(.98)}
+button:disabled{opacity:.45;cursor:default}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.primary{background:var(--accent);color:var(--on-accent);padding:0 26px;height:48px;font-weight:800;font-size:16px}
+.secondary{background:var(--surface);border:1px solid var(--line2);padding:0 16px;height:44px;font-weight:600}
+.ghost{background:none;color:var(--muted);padding:8px 12px;border-radius:8px}
+.ghost:hover{color:var(--text)}
+input,select,textarea{font-family:inherit}
+
+/* scrollbar: slim, themed; main is ltr so it sits on the right, its content stays rtl */
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--line2);border-radius:999px;border:2px solid var(--bg)}
+::-webkit-scrollbar-thumb:hover{background:var(--muted)}
+::-webkit-scrollbar-corner{background:transparent}
+main{direction:ltr}
+main>*{direction:rtl}
+
+/* header */
+.updbar{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:12px;padding:10px 28px;background:var(--warn-bg);color:var(--text);border-bottom:1px solid var(--line);font-size:15px}
+.updbar .primary{height:38px;padding:0 18px;font-size:14px}
+.top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;padding:14px 28px;border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:center;gap:12px}
+.logo{width:38px;height:38px;border-radius:11px;background:var(--accent);display:grid;place-items:center}
+.logo svg{width:21px;height:21px;stroke:var(--on-accent);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.brand b{font-size:21px;font-weight:800}
+.brand span{color:var(--muted);font-size:14px}
+.tools{display:flex;align-items:center;gap:10px;min-width:0}
+.theme{height:38px;padding:0 12px;border-radius:999px;background:var(--surface);border:1px solid var(--line);display:flex;align-items:center;gap:8px;font-size:13px}
+.theme svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round}
+.chip{display:flex;align-items:center;gap:9px;padding:8px 14px;border-radius:999px;background:var(--surface);border:1px solid var(--line);font-size:13px;min-width:0}
+.chip i{width:8px;height:8px;border-radius:50%;background:var(--muted);flex:none}
+.chip.ready i{background:var(--ok)} .chip.warn i{background:var(--warn)} .chip.bad i{background:var(--bad)}
+.chip span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+main{flex:1;overflow-y:auto}
+
+/* start */
+.hero{max-width:720px;margin:0 auto;padding:64px 24px 40px;display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center}
+.hero h1{font-size:36px;font-weight:800;letter-spacing:-.01em;margin-top:6px}
+.hero p{color:var(--muted);font-size:17px;max-width:540px}
+.form{width:100%;display:flex;flex-direction:column;gap:8px;margin-top:22px;text-align:start}
+.form label{font-size:14px;color:var(--muted)}
+.row{display:flex;flex-wrap:wrap;gap:10px}
+input[type=url]{flex:1 1 320px;height:54px;padding:0 16px;border-radius:12px;border:1px solid var(--line2);
+  background:var(--surface);color:var(--text);font:inherit;font-size:15px;outline:none}
+input[type=url]:focus{border-color:var(--accent)}
+.form .primary{height:54px}
+.err{color:var(--bad);min-height:20px;font-size:14px}
+.hint{color:var(--muted);font-size:13px}
+
+/* work */
+.work{display:flex;flex-wrap:wrap;gap:22px;padding:22px 28px;align-items:flex-start}
+.side{flex:1 1 280px;max-width:360px;display:flex;flex-direction:column;gap:14px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:12px}
+.card h2{font-size:15px;font-weight:700}
+.pl{flex-direction:row;align-items:center;gap:14px}
+.cover{width:64px;height:64px;border-radius:12px;background:var(--surface2);border:1px solid var(--line);display:grid;place-items:center;flex:none}
+.cover svg{width:28px;height:28px;stroke:var(--muted);fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.pl .info{min-width:0;flex:1}
+.pl b{display:block;font-size:17px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pl span{display:block;color:var(--muted);font-size:13px}
+.disc{padding:12px 14px;border-radius:12px;background:var(--surface2);border:1px solid var(--line);display:flex;flex-direction:column;gap:8px}
+.disc .h{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.disc .h b{font-size:14px}
+.disc .h span,.disc .s{color:var(--muted);font-size:13px}
+.bar{height:8px;border-radius:4px;background:var(--bg);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--accent);border-radius:4px}
+.note{color:var(--muted);font-size:13px}
+
+.panel{flex:999 1 520px;min-width:0;background:var(--surface);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.ph{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px;padding:18px 22px;border-bottom:1px solid var(--line)}
+.ph h2{font-size:20px;font-weight:800}
+.sub{color:var(--muted);font-size:13px;margin-top:2px}
+.banner{margin:14px 22px 0;padding:10px 14px;border-radius:10px;background:var(--warn-bg);color:var(--warn);font-size:13px;font-weight:600}
+.rows{padding:8px 10px 12px}
+.sep{display:flex;align-items:center;gap:12px;margin:16px 12px 6px;font-size:13px;font-weight:700;color:var(--muted)}
+.sep .bar{flex:1;height:6px}
+.tr{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;cursor:pointer;user-select:none}
+.tr+.tr{border-top:1px solid var(--line)}
+.tr:hover{background:var(--surface2)}
+.tr.off{opacity:.45}
+.n{width:24px;color:var(--muted);font-size:13px;text-align:center;flex:none}
+.chk{width:20px;height:20px;border-radius:6px;border:1.5px solid var(--line2);display:grid;place-items:center;flex:none;background:var(--surface)}
+.tr:not(.off) .chk{background:var(--accent);border-color:var(--accent)}
+.chk svg{width:12px;height:12px;stroke:var(--on-accent);fill:none;stroke-width:2.6;opacity:0}
+.tr:not(.off) .chk svg{opacity:1}
+.meta{flex:1;min-width:0;display:flex;gap:6px 16px;flex-wrap:wrap;align-items:baseline}
+.meta b{flex:1 1 200px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.meta span{flex:1 1 140px;color:var(--muted);font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dur{color:var(--muted);font-size:14px;flex:none}
+.art{width:40px;height:40px;border-radius:8px;flex:none;object-fit:cover;background:var(--surface2);border:1px solid var(--line)}
+.cover img{width:100%;height:100%;object-fit:cover;border-radius:inherit}
+.play.na{opacity:.4;cursor:not-allowed}
+.play.wait svg{animation:pulse 1s infinite}
+@keyframes pulse{50%{opacity:.3}}
+.page{width:100%;display:flex;flex-direction:column;align-items:center;gap:14px}
+.back{align-self:flex-start;font-size:15px}
+.workbar{flex:1 1 100%;margin-bottom:-10px}
+.choices{width:100%;display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin-top:22px}
+.choice{display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding:24px;border-radius:16px;background:var(--surface);border:1px solid var(--line);text-align:start}
+.choice:hover{border-color:var(--accent)}
+.choice b{font-size:19px;font-weight:800}
+.choice span{color:var(--muted);font-size:14px}
+.choice .ic{width:46px;height:46px;border-radius:12px;background:var(--accent);display:grid;place-items:center;margin-bottom:8px}
+.choice .ic svg{width:22px;height:22px;stroke:var(--on-accent);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.search{position:relative;width:100%}
+.search>svg{position:absolute;inset-inline-start:16px;top:50%;width:18px;height:18px;margin-top:-9px;stroke:var(--muted);fill:none;stroke-width:2;stroke-linecap:round;pointer-events:none}
+.search input{width:100%;height:54px;padding-inline:46px 16px;border-radius:12px;border:1px solid var(--line2);background:var(--surface);color:var(--text);font:inherit;font-size:15px;outline:none}
+.search input:focus{border-color:var(--accent)}
+.search input::-webkit-search-cancel-button{display:none}
+.sug{position:absolute;inset-inline:0;top:calc(100% + 6px);z-index:20;list-style:none;margin:0;padding:6px;background:var(--surface);border:1px solid var(--line2);border-radius:12px;box-shadow:0 14px 36px rgba(0,0,0,.2);max-height:380px;overflow-y:auto;text-align:start}
+.sug li{display:flex;align-items:center;gap:12px;padding:8px 10px;border-radius:8px;cursor:pointer}
+.sug li[aria-selected="true"],.sug li[data-k]:hover{background:var(--surface2)}
+.sug li.msg{color:var(--muted);cursor:default}
+.sug .in{flex:none;font-size:12px;color:var(--muted)}
+.addbar{padding:14px 22px 0}
+.addbar .search input{height:46px}
+.panel{overflow:visible}
+.tr.burned{background:var(--warn-bg)}
+.tr.burned+.tr,.tr+.tr.burned{border-top-color:transparent}
+.tag{flex:none;max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:700;color:var(--warn);border:1px solid currentColor}
+.recent{width:100%;display:flex;flex-direction:column;gap:12px;margin-top:28px;text-align:start}
+.recent h2{font-size:15px;font-weight:700}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
+.grid button{display:flex;flex-direction:column;align-items:flex-start;gap:3px;padding:14px 16px;border-radius:14px;background:var(--surface);border:1px solid var(--line);text-align:start}
+.grid button:hover{border-color:var(--accent)}
+.grid b{font-weight:700;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.grid span{color:var(--muted);font-size:13px}
+.grid span span{white-space:nowrap}
+.pager{display:flex;align-items:center;justify-content:center;gap:12px;font-size:14px;color:var(--muted)}
+.pager button{height:36px;padding:0 14px;border-radius:10px;background:var(--surface);border:1px solid var(--line2);color:var(--text)}
+.play{width:30px;height:30px;border-radius:50%;background:none;border:1px solid var(--line2);display:grid;place-items:center;flex:none}
+.play svg{width:11px;height:11px;fill:currentColor}
+.play:hover,.play.on{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
+.grip{color:var(--muted);cursor:grab;font-size:15px;letter-spacing:-2px;width:14px;text-align:center;flex:none}
+.tr.drg{cursor:grab}
+.tr.drag{opacity:.35}
+.tr.over-top{box-shadow:0 -2px 0 var(--accent)} .tr.over-bot{box-shadow:0 2px 0 var(--accent)}
+
+footer{border-top:1px solid var(--line);background:var(--surface2);padding:14px 28px;display:flex;flex-wrap:wrap;align-items:center;gap:16px}
+footer .status{flex:1 1 220px;font-size:14px;color:var(--muted)}
+footer .status b{color:var(--text)}
+.burn svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:2}
+.burn{display:flex;align-items:center;gap:10px}
+
+/* modal */
+#modal{position:fixed;inset:0;background:color-mix(in srgb,var(--bg) 80%,transparent);backdrop-filter:blur(6px);
+  display:none;align-items:center;justify-content:center;padding:24px}
+.dlg{width:100%;max-width:440px;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:28px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:6px}
+.dlg .ok{width:64px;height:64px;border-radius:50%;background:var(--ok-bg);display:grid;place-items:center;margin-bottom:8px}
+.dlg .ok svg{width:32px;height:32px;stroke:var(--ok);fill:none;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round}
+.dlg h3{font-size:20px;font-weight:800}
+.dlg p{color:var(--muted);font-size:14px;min-height:20px;overflow-wrap:anywhere}
+.pbar{align-self:stretch;height:8px;border-radius:4px;background:var(--bg);margin:18px 0;overflow:hidden}
+.pbar i{display:block;height:100%;width:0;background:var(--accent);border-radius:4px;transition:width .3s}
+.dlg .row{justify-content:center}
+/* onboarding tour (driver.js) themed to match */
+.driver-popover.burner-tour{background:var(--surface);color:var(--text);font-family:inherit;direction:rtl;text-align:start;border:1px solid var(--line);border-radius:14px;padding:18px 20px;max-width:340px;box-shadow:0 18px 40px rgba(0,0,0,.25)}
+.burner-tour .driver-popover-title{font:800 18px/1.3 inherit;font-family:inherit}
+.burner-tour .driver-popover-description{font-size:14.5px;line-height:1.55;color:var(--muted);font-family:inherit}
+.burner-tour .driver-popover-progress-text{color:var(--muted);font-size:13px}
+.burner-tour .driver-popover-footer button{font-family:inherit;font-size:14px;text-shadow:none;border-radius:8px;padding:6px 12px;background:var(--surface2);color:var(--text);border:1px solid var(--line2)}
+.burner-tour .driver-popover-footer .driver-popover-next-btn{background:var(--accent);color:var(--on-accent);border-color:var(--accent);font-weight:700}
+.burner-tour .driver-popover-close-btn{color:var(--muted);inset-inline-end:auto;left:4px;right:auto}
+.burner-tour .driver-popover-navigation-btns{gap:6px}
+.burner-tour .driver-popover-arrow-side-left{border-left-color:var(--surface)}
+.burner-tour .driver-popover-arrow-side-right{border-right-color:var(--surface)}
+.burner-tour .driver-popover-arrow-side-top{border-top-color:var(--surface)}
+.burner-tour .driver-popover-arrow-side-bottom{border-bottom-color:var(--surface)}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <div class="logo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2c1 3.5 5 5.5 5 10a5 5 0 0 1-10 0c0-2 1-3.5 2-4.5 0 2 1 3 2 3 0-3-1-5.5 1-8.5z"/></svg></div>
+    <b>Burner</b><span>פלייליסט ← דיסקים</span>
+  </div>
+  <div class="tools">
+    <button class="theme" id="help" type="button" aria-label="סיור באפליקציה"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6"/><path d="M12 17.2v.1"/></svg><span>עזרה</span></button>
+    <button class="theme" id="theme" type="button"></button>
+    <div class="chip" id="chip"><i></i><span>בודק צורב…</span></div>
+  </div>
+</header>
+<div class="updbar" id="updbar" role="status" hidden>
+  <span>גרסה חדשה של Burner זמינה (<b id="updver"></b>).</span>
+  <button class="primary" id="upd" type="button">עדכן עכשיו</button>
+  <button class="ghost" id="updlater" type="button">אחר כך</button>
+</div>
+
+<main>
+  <section class="hero" id="start">
+    <div class="page" id="p-choose">
+      <svg width="84" height="84" viewBox="0 0 88 88" fill="none" aria-hidden="true"><circle cx="44" cy="44" r="42" stroke="var(--line2)" stroke-width="2"/><circle cx="44" cy="44" r="30" stroke="var(--line)" stroke-width="2"/><circle cx="44" cy="44" r="10" stroke="var(--accent)" stroke-width="2.5"/><path d="M44 2a42 42 0 0 1 42 42" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round"/></svg>
+      <h1>מפלייליסט לדיסק, בלחיצה אחת</h1>
+      <p>Burner מוריד את השירים, מחלק אותם לדיסקים של 80 דקות וצורב לפי הסדר. איך תרצה להתחיל?</p>
+      <div class="choices">
+        <button class="choice" type="button" data-go="link">
+          <span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg></span>
+          <b>מקישור לפלייליסט</b><span>הדבק קישור מ־Spotify או Apple Music</span>
+        </button>
+        <button class="choice" type="button" data-go="search">
+          <span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg></span>
+          <b>מחיפוש שירים</b><span>בנה רשימה משלך, שיר אחרי שיר</span>
+        </button>
+      </div>
+      <section class="recent" id="recent" aria-labelledby="recent-h" hidden>
+        <h2 id="recent-h">נצרבו לאחרונה</h2>
+        <div class="grid" id="rgrid"></div>
+        <nav class="pager" id="pager" aria-label="עמודי היסטוריה">
+          <button type="button" id="pprev">הקודם</button>
+          <span id="pinfo"></span>
+          <button type="button" id="pnext">הבא</button>
+        </nav>
+      </section>
+    </div>
+
+    <div class="page" id="p-link" hidden>
+      <button class="ghost back" type="button" data-go="choose">→ חזרה</button>
+      <h1>מקישור לפלייליסט</h1>
+      <p>הדבק קישור לפלייליסט ציבורי. אחרי הטעינה תוכל לבחור שירים, לסדר אותם ולצרוב.</p>
+      <div class="form">
+        <label for="url">קישור לפלייליסט</label>
+        <div class="row">
+          <input id="url" type="url" dir="ltr" placeholder="https://open.spotify.com/playlist/…">
+          <button class="primary" id="load" type="button">טען פלייליסט</button>
+        </div>
+        <div class="err" id="err" role="alert"></div>
+        <div class="hint">נתמכים: Spotify ו־Apple Music, פלייליסטים ציבוריים בלבד. נקראים עד כ־50 השירים הראשונים.</div>
+      </div>
+    </div>
+
+    <div class="page" id="p-search" hidden>
+      <button class="ghost back" type="button" data-go="choose">→ חזרה</button>
+      <h1>מחיפוש שירים</h1>
+      <p>הקלד שם של שיר או אמן ובחר מההצעות. השיר הראשון פותח רשימה חדשה, ובמסך הבא אפשר להמשיך להוסיף.</p>
+      <div class="form">
+        <label for="q1">חיפוש שיר</label>
+        <div class="search">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+          <input id="q1" type="search" role="combobox" aria-expanded="false" aria-controls="sug1" aria-autocomplete="list" autocomplete="off" placeholder="שם שיר או אמן…">
+          <ul class="sug" id="sug1" role="listbox" aria-label="הצעות שירים" hidden></ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="work" id="work" hidden>
+    <div class="workbar"><button class="ghost back" id="back" type="button">→ חזרה</button></div>
+    <aside class="side">
+      <div class="card pl">
+        <div class="cover"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div>
+        <div class="info"><b id="pname" dir="auto"></b><span id="pmeta"></span></div>
+      </div>
+      <div class="card">
+        <h2>חלוקה לדיסקים</h2>
+        <div id="discs"></div>
+        <div class="note">שיר לא נחתך בין דיסקים — הסדר נשמר.</div>
+      </div>
+      <button class="secondary" id="new" type="button">פלייליסט חדש</button>
+    </aside>
+
+    <section class="panel">
+      <div class="ph">
+        <div><h2 id="ptitle">שירים לצריבה</h2><div class="sub" id="summary"></div></div>
+        <button class="ghost" id="all" type="button"></button>
+      </div>
+      <div class="addbar">
+        <div class="search">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+          <input id="q2" type="search" role="combobox" aria-expanded="false" aria-controls="sug2" aria-autocomplete="list" autocomplete="off" aria-label="הוסף שיר לרשימה" placeholder="הוסף שיר: שם שיר או אמן…">
+          <ul class="sug" id="sug2" role="listbox" aria-label="הצעות שירים" hidden></ul>
+        </div>
+      </div>
+      <div class="banner" id="banner" hidden></div>
+      <div class="rows" id="rows"></div>
+    </section>
+  </div>
+</main>
+
+<footer id="foot" hidden>
+  <div class="status" id="fstatus"></div>
+  <button class="primary burn" id="burn" type="button" disabled></button>
+</footer>
+
+<div id="modal"><div class="dlg" role="dialog" aria-modal="true" aria-labelledby="mt">
+  <div class="ok" id="mok" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
+  <h3 id="mt"></h3><p id="mp"></p>
+  <div class="pbar" id="mbar"><i id="mb"></i></div>
+  <div class="row" id="mbtn"></div>
+</div></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const CAP0 = 79 * 60, GAP = 2;
+const fmt = s => { s = Math.round(s); return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`; };
+const esc = s => s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const CHECK = '<svg viewBox="0 0 12 12"><path d="M2 6.5l2.5 2.5L10 3.5"/></svg>';
+const DISC = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5"/></svg>';
+
+// ---- theme: system → light → dark ----
+const THEMES = [['', 'מערכת', '<circle cx="12" cy="12" r="8"/><path d="M12 4v16"/>'],
+  ['light', 'בהיר', '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>'],
+  ['dark', 'כהה', '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>']];
+function paintTheme() {
+  const cur = document.documentElement.dataset.theme || '', t = THEMES.find(x => x[0] === cur) || THEMES[0];
+  $('theme').innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${t[2]}</svg><span>${t[1]}</span>`;
+  $('theme').setAttribute('aria-label', 'ערכת צבעים: ' + t[1]);
+}
+$('theme').onclick = () => {
+  const cur = document.documentElement.dataset.theme || '', next = THEMES[(THEMES.findIndex(x => x[0] === cur) + 1) % 3][0];
+  if (next) document.documentElement.dataset.theme = next; else delete document.documentElement.dataset.theme;
+  try { next ? localStorage.setItem('theme', next) : localStorage.removeItem('theme'); } catch (e) {}
+  paintTheme();
+};
+paintTheme();
+
+const S = { tracks: [], sel: new Set(), order: [], cap: CAP0, ready: false, busy: false };
+const secs = i => Math.round(S.tracks[i].ms / 1000);
+
+function plan(idx) {                       // same rule as core.plan_discs
+  const discs = []; let cur = [], used = 0;
+  for (const i of idx) {
+    const need = secs(i) + GAP;
+    if (cur.length && used + need > S.cap) { discs.push({ items: cur, used }); cur = []; used = 0; }
+    cur.push(i); used += need;
+  }
+  if (cur.length) discs.push({ items: cur, used });
+  return discs;
+}
+const selected = () => S.order.filter(i => S.sel.has(i));  // in the arranged order
+// 30s preview player (one track at a time)
+const player = new Audio(); let playing = null, waiting = null;
+const noPreview = new Set();
+player.onended = () => { playing = null; render(); };
+const playBtn = i => {
+  if (!S.tracks[i].preview) return '';
+  if (noPreview.has(i)) return `<button class="play na" type="button" disabled aria-label="תצוגה מקדימה לא זמינה" title="תצוגה מקדימה לא זמינה"><svg viewBox="0 0 12 12"><path d="M3.5 2l6 4-6 4z"/></svg></button>`;
+  const on = playing === i;
+  return `<button class="play${on ? ' on' : ''}${waiting === i ? ' wait' : ''}" data-p="${i}" type="button" aria-label="${on ? 'עצור תצוגה מקדימה' : 'השמע תצוגה מקדימה'}">${on
+      ? '<svg viewBox="0 0 12 12"><path d="M3 2h2v8H3zM7 2h2v8H7z"/></svg>' : '<svg viewBox="0 0 12 12"><path d="M3.5 2l6 4-6 4z"/></svg>'}</button>`;
+};
+async function togglePlay(i) {
+  if (playing === i) { stopPlay(); render(); return; }
+  playing = waiting = i; render();
+  const url = S.tracks[i].preview;
+  try {
+    player.src = url; await player.play();
+  } catch (e) {                            // the webview could not stream it directly: fetch it through Python
+    try {
+      const data = await pywebview.api.preview(url);
+      if (playing !== i) return;
+      if (!data) throw e;
+      player.src = data; await player.play();
+    } catch (e2) { if (playing === i) { noPreview.add(i); playing = null; } }
+  }
+  if (waiting === i) waiting = null;
+  render();
+}
+function stopPlay() { player.pause(); playing = waiting = null; }
+const onPlay = e => { const b = e.target.closest('.play'); if (!b) return false; e.stopPropagation(); togglePlay(+b.dataset.p); return true; };
+const meta = t => (t.art ? `<img class="art" src="${esc(t.art)}" alt="" loading="lazy">` : '<span class="art" aria-hidden="true"></span>') + `<div class="meta"><b dir="auto">${esc(t.title)}</b><span dir="auto">${esc(t.artist)}</span></div>`;
+const dur = s => `<span class="dur mono" dir="ltr">${fmt(s)}</span>`;
+const tag = t => t.burned ? `<span class="tag" dir="auto">${t.burned_in ? 'נצרב ב־' + esc(t.burned_in) : 'כבר נצרב'}</span>` : '';
+const discWord =n => n === 1 ? 'דיסק אחד' : `${n} דיסקים`;
+
+function render() {
+  const has = S.tracks.length > 0;
+  $('start').hidden = has; $('work').hidden = !has; $('foot').hidden = !has;
+  if (!has) return;
+  const idx = selected(), discs = plan(idx), full = S.cap + 60, n = discs.length;
+  const total = idx.reduce((a, i) => a + secs(i), 0);
+  $('pmeta').textContent = `${S.tracks.length} שירים · ${fmt(S.tracks.reduce((a, t) => a + t.ms / 1000, 0))}`;
+  $('discs').innerHTML = discs.map((d, k) => `<div class="disc"><div class="h"><b>דיסק ${k + 1}</b><span class="mono" dir="ltr">${fmt(d.used)} / ${fmt(full)}</span></div>
+    <div class="bar"><i style="width:${Math.min(100, d.used / full * 100)}%"></i></div><span class="s">${d.items.length} שירים · ${fmt(Math.max(0, full - d.used))} פנוי</span></div>`).join('')
+    || '<div class="note">לא נבחרו שירים.</div>';
+  // a nearly empty last disc wastes a blank: say how much to cut to save it
+  const last = discs[n - 1], over = discs.reduce((a, d) => a + d.used, 0) - (n - 1) * S.cap;
+  const b = $('banner'); b.hidden = n < 2;
+  if (n > 1) b.textContent = last.used < 15 * 60
+    ? `דיסק ${n} יכיל רק ${last.items.length === 1 ? 'שיר אחד' : last.items.length + ' שירים'} (${fmt(last.used)}). כדי לחסוך דיסק, בטל עוד כ־${fmt(over)} של שירים.`
+    : `יידרשו ${n} דיסקים ריקים. תתבקש להכניס כל אחד כשיגיע תורו.`;
+  $('fstatus').innerHTML = `<b>${idx.length}</b> שירים · <span class="mono" dir="ltr">${fmt(total)}</span> · ${n ? discWord(n) : '—'}`;
+
+  const old = S.tracks.filter(t => t.burned).length;
+  $('summary').textContent = `${idx.length} מתוך ${S.tracks.length} נבחרו · לחץ לבחירה, גרור לשינוי הסדר` + (old ? ` · ${old} כבר נצרבו בעבר` : '');
+  $('all').textContent = S.sel.size === S.tracks.length ? 'נקה הכל' : 'בחר הכל';
+  const discOf = new Map(); discs.forEach((d, k) => d.items.forEach((i, p) => discOf.set(i, [k, p])));
+  let html = '', cur = -1;
+  for (const i of S.order) {
+    const t = S.tracks[i], at = discOf.get(i);
+    if (at && at[0] !== cur) {
+      const d = discs[cur = at[0]];
+      html += `<div class="sep"><span>דיסק ${cur + 1}</span><div class="bar"><i style="width:${Math.min(100, d.used / full * 100)}%"></i></div><span class="mono" dir="ltr">${fmt(d.used)} / ${fmt(full)}</span></div>`;
+    }
+    html += `<div class="tr drg ${at ? '' : 'off'}${t.burned ? ' burned' : ''}" draggable="true" data-i="${i}" role="checkbox" tabindex="0" aria-checked="${!!at}">
+      <span class="grip" aria-hidden="true">⋮⋮</span><span class="chk">${CHECK}</span><span class="n mono">${at ? at[1] + 1 : ''}</span>${meta(t)}${tag(t)}${playBtn(i)}${dur(t.ms / 1000)}</div>`;
+  }
+  $('rows').innerHTML = html;
+  $('burn').innerHTML = DISC + `<span>${n > 1 ? `צרוב ${n} דיסקים` : 'צרוב דיסק'}</span>`;
+  $('burn').disabled = S.busy || !n;
+}
+
+// click toggles a song, drag reorders it
+const toggle = r => { const i = +r.dataset.i; S.sel.has(i) ? S.sel.delete(i) : S.sel.add(i); render(); };
+$('rows').addEventListener('click', e => {
+  if (onPlay(e)) return;
+  const r = e.target.closest('.tr'); if (r) toggle(r);
+});
+$('rows').addEventListener('keydown', e => {
+  if ((e.key !== ' ' && e.key !== 'Enter') || !e.target.matches('.tr')) return;
+  e.preventDefault(); const i = e.target.dataset.i; toggle(e.target); document.querySelector(`.tr[data-i="${i}"]`)?.focus();
+});
+$('all').onclick = () => { S.sel = S.sel.size === S.tracks.length ? new Set() : new Set(S.tracks.keys()); render(); };
+
+let dragI = null;
+const rowOf = e => e.target.closest('.tr.drg');
+$('rows').ondragstart = e => { const r = rowOf(e); if (!r) return; dragI = +r.dataset.i; e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', String(dragI)); setTimeout(() => r.classList.add('drag'), 0); };
+$('rows').ondragover = e => {
+  const r = rowOf(e); if (dragI === null || !r) return; e.preventDefault();
+  document.querySelectorAll('.over-top,.over-bot').forEach(x => x.classList.remove('over-top', 'over-bot'));
+  const box = r.getBoundingClientRect();
+  r.classList.add(e.clientY < box.top + box.height / 2 ? 'over-top' : 'over-bot');
+};
+$('rows').ondrop = e => {
+  const r = rowOf(e); if (dragI === null || !r) return; e.preventDefault();
+  const box = r.getBoundingClientRect(), after = e.clientY >= box.top + box.height / 2, to = +r.dataset.i;
+  if (to !== dragI) {
+    S.order = S.order.filter(i => i !== dragI);
+    S.order.splice(S.order.indexOf(to) + (after ? 1 : 0), 0, dragI);
+  }
+  dragI = null; render();
+};
+$('rows').ondragend = () => { dragI = null; render(); };
+
+$('new').onclick = () => { stopPlay(); S.tracks = []; S.order = []; render(); history(); go('choose'); };
+// back to the page the list came from; a list built by search exists only here, so confirm first
+$('back').onclick = () => {
+  if (S.from === 'search' && S.tracks.length > 1 && !confirm('לחזור לחיפוש? הרשימה שבנית תימחק.')) return;
+  stopPlay(); S.tracks = []; S.order = []; render(); history(); go(S.from || 'choose');
+};
+
+// start screen: a choice page, then the link page or the search page
+function go(page) {
+  for (const p of ['choose', 'link', 'search']) $('p-' + p).hidden = p !== page;
+  if (page === 'link') $('url').focus();
+  if (page === 'search') $('q1').focus();
+}
+$('start').addEventListener('click', e => { const b = e.target.closest('[data-go]'); if (b) go(b.dataset.go); });
+
+let recent = [], page = 0;
+const PAGE = 6;
+async function history() { recent = await pywebview.api.history(); page = 0; paintRecent(); }
+function paintRecent() {
+  const pages = Math.ceil(recent.length / PAGE);
+  page = Math.min(page, Math.max(0, pages - 1));
+  $('recent').hidden = !recent.length;
+  $('pager').hidden = pages < 2;
+  $('pinfo').textContent = `עמוד ${page + 1} מתוך ${pages}`;
+  $('pprev').disabled = page === 0; $('pnext').disabled = page >= pages - 1;
+  $('rgrid').innerHTML = recent.slice(page * PAGE, page * PAGE + PAGE).map((p, j) => [p, page * PAGE + j]).map(([p, k]) => `<button type="button" data-k="${k}"><b dir="auto">${esc(p.name)}</b>
+    <span>${p.count} שירים · ${p.discs > 1 ? p.discs + ' דיסקים' : 'דיסק אחד'} · <span dir="ltr">${esc(p.at || '')}</span></span></button>`).join('');
+}
+$('pprev').onclick = () => { page--; paintRecent(); };
+$('pnext').onclick = () => { page++; paintRecent(); };
+$('rgrid').onclick =e => { const b = e.target.closest('button'); if (!b || !recent[b.dataset.k].url) return; $('url').value = recent[b.dataset.k].url; go('link'); load(); };
+
+async function load() {
+  const url = $('url').value.trim(); if (!url) return;
+  S.url = url; S.from = 'link';
+  $('err').textContent = ''; $('load').disabled = true; $('load').textContent = 'טוען…';
+  const r = await pywebview.api.load(url);
+  $('load').disabled = false; $('load').textContent = 'טען פלייליסט';
+  if (!r.ok) { $('err').textContent = r.msg; return; }
+  S.tracks = r.tracks; S.sel = new Set(r.tracks.keys()); S.order = [...r.tracks.keys()];
+  $('pname').textContent = S.name = r.name;
+  noPreview.clear(); setCover();
+  render();
+}
+$('load').onclick = load;
+$('url').onkeydown = e => { if (e.key === 'Enter') load(); };
+
+function setCover() {
+  const art = S.tracks.find(t => t.art)?.art, cover = document.querySelector('.pl .cover');
+  cover.innerHTML = art ? `<img src="${esc(art)}" alt="">` : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>';
+}
+
+// ---- build a list from song search ----
+const keyOf = t => `${t.artist}|${t.title}`.toLowerCase();
+function addTrack(t) {
+  if (!S.tracks.length) {                  // first pick on the start screen opens a new list
+    S.url = null; S.from = 'search'; S.name = 'רשימה מ־' + new Date().toLocaleDateString('he-IL');
+    S.sel = new Set(); S.order = []; noPreview.clear();
+    $('pname').textContent = S.name;
+  }
+  let i = S.tracks.findIndex(x => keyOf(x) === keyOf(t));
+  if (i < 0) { i = S.tracks.push(t) - 1; S.order.push(i); }
+  S.sel.add(i); setCover(); render();
+  document.querySelector(`.tr[data-i="${i}"]`)?.scrollIntoView({ block: 'nearest' });
+  $('q2').focus();
+}
+
+function makeSearch(input, list) {
+  let timer, seq = 0, items = [], active = -1;
+  const close = () => { list.hidden = true; input.setAttribute('aria-expanded', 'false'); input.removeAttribute('aria-activedescendant'); active = -1; };
+  const show = html => { list.innerHTML = html; list.hidden = false; input.setAttribute('aria-expanded', 'true'); };
+  input.addEventListener('input', () => {
+    clearTimeout(timer);
+    const q = input.value.trim();
+    if (q.length < 2) { seq++; close(); return; }
+    timer = setTimeout(async () => {     // debounce: search only once typing pauses
+      const my = ++seq;
+      show('<li class="msg">מחפש…</li>');
+      const r = await pywebview.api.search(q);
+      if (my !== seq) return;              // a newer search already started
+      if (!r.ok) { show(`<li class="msg">${esc(r.msg)}</li>`); return; }
+      items = r.tracks; active = -1;
+      const inList = new Set(S.tracks.map(keyOf));
+      show(items.length ? items.map((t, k) => `<li role="option" id="${list.id}-${k}" data-k="${k}" aria-selected="false">${meta(t)}${tag(t)}${inList.has(keyOf(t)) ? '<span class="in">ברשימה</span>' : ''}${dur(t.ms / 1000)}</li>`).join('')
+        : '<li class="msg">לא נמצאו שירים</li>');
+    }, 300);
+  });
+  const pick = k => { input.value = ''; close(); addTrack(items[k]); };
+  list.addEventListener('mousedown', e => { const li = e.target.closest('li[data-k]'); if (li) { e.preventDefault(); pick(+li.dataset.k); } });
+  input.addEventListener('keydown', e => {
+    const lis = list.hidden ? [] : list.querySelectorAll('li[data-k]');
+    if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && lis.length) {
+      e.preventDefault();
+      active = (active + (e.key === 'ArrowDown' ? 1 : -1) + lis.length) % lis.length;
+      lis.forEach((li, n) => li.setAttribute('aria-selected', n === active));
+      input.setAttribute('aria-activedescendant', lis[active].id); lis[active].scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'Enter' && active >= 0) { e.preventDefault(); pick(active); }
+    else if (e.key === 'Escape') close();
+  });
+  input.addEventListener('blur', () => setTimeout(close, 150));
+}
+makeSearch($('q1'), $('sug1'));
+makeSearch($('q2'), $('sug2'));
+
+async function poll() {
+  if (S.busy) return;
+  const s = await pywebview.api.status();
+  S.ready = s.state === 'ready';
+  const cap = s.cap_s ? Math.min(CAP0, s.cap_s - 60) : CAP0;
+  const changed = cap !== S.cap; S.cap = cap;
+  $('chip').className = 'chip ' + (S.ready ? 'ready' : s.state === 'no_drive' || s.state === 'unsupported' ? 'bad' : 'warn');
+  $('chip').lastElementChild.textContent = s.text;
+  if (changed && S.tracks.length) render();
+}
+
+// ---- burning ----
+function modal(title, text, pct, buttons, done) {
+  $('modal').style.display = 'flex'; $('mt').textContent = title; $('mp').textContent = text;
+  $('mok').hidden = !done; $('mbar').hidden = !!done;
+  $('mb').style.width = pct + '%'; $('mbtn').innerHTML = '';
+  (buttons || []).forEach(([label, fn, primary]) => {
+    const b = document.createElement('button'); b.type = 'button'; b.textContent = label;
+    b.className = primary ? 'primary' : 'ghost'; b.onclick = fn; $('mbtn').append(b);
+  });
+  $('mbtn').querySelector('button')?.focus();
+}
+const close = () => { $('modal').style.display = 'none'; S.busy = false; render(); poll(); history(); };
+
+$('burn').onclick = async () => {
+  stopPlay();
+  const r = await pywebview.api.burn(selected().map(i => S.tracks[i]), S.name, S.url);
+  if (!r.ok) { modal('אי אפשר להתחיל', r.msg, 0, [['אישור', close, true]]); return; }
+  S.busy = true; modal('מתחיל…', '', 0, [['ביטול', () => pywebview.api.abort()]]);
+};
+
+window.App = { progress(p) {
+  const cancel = ['ביטול', () => pywebview.api.abort()];
+  if (p.phase === 'download') modal('מוריד שירים', `${p.i + 1} מתוך ${p.n} · ${p.name}`, p.i / p.n * 100, [cancel]);
+  else if (p.phase === 'insert') modal(`הכנס דיסק ריק (${p.disc} מתוך ${p.of})`, 'הצריבה תמשיך לבד כשיזוהה דיסק ריק.', 0,
+    [['המשך', () => pywebview.api.proceed(), true], cancel]);
+  else if (p.phase === 'burn') modal(`צורב דיסק ${p.disc} מתוך ${p.of}`, `שיר ${p.i + 1} מתוך ${p.n} · אל תוציא את הדיסק`, p.i / p.n * 100, []);
+  else if (p.phase === 'done') modal('הצריבה הושלמה', (p.discs > 1 ? `${p.discs} דיסקים נצרבו.` : 'הדיסק נצרב.') +
+    (p.skipped.length ? ` דולגו ${p.skipped.length}: ` + p.skipped.join('; ') : ''), 100, [['סגור', close, true]], true);
+  else if (p.phase === 'cancelled') close();
+  else if (p.phase === 'update') modal('מוריד עדכון', `${p.pct}%`, p.pct, []);
+  else if (p.phase === 'update_restart') modal('מתקין את העדכון', 'Burner ייסגר ויפתח מחדש בעוד רגע.', 100, []);
+  else if (p.phase === 'update_error') modal('העדכון נכשל', p.msg, 0, [['סגור', close, true]]);
+  else if (p.phase === 'error') modal('משהו השתבש', p.msg, 0, [['סגור', close, true]]);
+}};
+
+// ---- onboarding tour (driver.js): one for the start screen, one for the songs screen ----
+const step = (element, title, description, side) => ({ element, popover: { title, description, side } });
+function tour(which) {
+  const visible = sel => { const el = document.querySelector(sel); return el && el.offsetParent !== null; };
+  const steps = which === 'work' ? [
+    step('#rows .tr', 'הרשימה שלך', 'לחיצה על שיר מסמנת או מבטלת אותו. גרור שיר כדי לשנות את הסדר. הכפתור ▶ משמיע קטע של 30 שניות.', 'bottom'),
+    step('.addbar', 'הוספת שירים', 'חפש שיר או אמן ובחר מההצעות כדי להוסיף לרשימה.', 'bottom'),
+    step('#discs', 'חלוקה לדיסקים', 'Burner מחלק את השירים לדיסקים של 80 דקות, לפי הסדר, בלי לחתוך שיר באמצע.', 'left'),
+    visible('#banner') && step('#banner', 'שים לב', 'כאן תופיע אזהרה כשדיסק כמעט ריק, עם כמה דקות לבטל כדי לחסוך דיסק.', 'bottom'),
+    step('#burn', 'צריבה', 'הכנס דיסק CD-R ריק ולחץ כאן. השירים יורדים ונצרבים. אם יש כמה דיסקים, תתבקש להכניס כל אחד בתורו.', 'top'),
+    step('#back', 'חזרה', 'חוזר למסך הקודם כדי להתחיל רשימה אחרת.', 'bottom'),
+  ] : [
+    { popover: { title: 'ברוך הבא ל־Burner', description: 'Burner צורב שירים לדיסק שמע שמתנגן בכל נגן: ברכב, במערכת או בדיסקמן. סיור קצר של כמה צעדים.' } },
+    step('.choices', 'בחר איך להתחיל', 'הדבק קישור לפלייליסט מ־Spotify או Apple Music, או חפש שירים ובנה רשימה משלך.', 'top'),
+    visible('#recent') && step('#recent', 'נצרבו לאחרונה', 'פלייליסטים שצרבת. לחיצה טוענת אותם שוב.', 'top'),
+    step('#chip', 'מצב הצורב', 'נקודה ירוקה: יש דיסק ריק ואפשר לצרוב. כתומה או אדומה: צריך להכניס דיסק או לחבר צורב.', 'bottom'),
+    step('#theme', 'בהיר או כהה', 'מחליף בין ערכת המערכת, בהיר וכהה.', 'bottom'),
+    step('#help', 'עזרה', 'אפשר להפעיל את הסיור שוב בכל רגע מכאן. במסך השירים יש סיור משלו.', 'bottom'),
+  ];
+  const key = which === 'work' ? 'tourWork' : 'tourStart';
+  window.driver.js.driver({
+    steps: steps.filter(Boolean), showProgress: true, popoverClass: 'burner-tour', stagePadding: 6, stageRadius: 12,
+    nextBtnText: 'הבא', prevBtnText: 'הקודם', doneBtnText: 'סיום', progressText: '{{current}} מתוך {{total}}',
+    onDestroyed: () => { try { localStorage.setItem(key, '1'); } catch (e) {} },
+  }).drive();
+}
+const seen = key => { try { return !!localStorage.getItem(key); } catch (e) { return true; } };
+$('help').onclick = () => tour($('work').hidden ? 'start' : 'work');
+let workTourPending = !seen('tourWork');
+const _render = render;
+render = function () {                     // first time the songs screen appears, run its tour
+  _render();
+  if (workTourPending && S.tracks.length) { workTourPending = false; setTimeout(() => tour('work'), 300); }
+};
+if (!seen('tourStart')) setTimeout(() => tour('start'), 300);
+
+render();
+async function checkUpdate() {
+  const u = await pywebview.api.check_update(); if (!u) return;
+  $('updver').textContent = u.version; $('updbar').hidden = false;
+  $('upd').onclick = async () => {
+    const r = await pywebview.api.update(u);
+    if (!r.ok) { modal('אי אפשר לעדכן עכשיו', r.msg, 0, [['סגור', close, true]]); return; }
+    $('updbar').hidden = true; S.busy = true; modal('מוריד עדכון', '0%', 0, []);
+  };
+  $('updlater').onclick = () => { $('updbar').hidden = true; };
+}
+window.addEventListener('pywebviewready', () => { checkUpdate(); poll(); history(); setInterval(poll, 5000); });
+</script>
+</body>
+</html>

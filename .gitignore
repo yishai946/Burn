@@ -1,0 +1,12 @@
+# build output
+dist/
+build/
+__pycache__/
+*.spec
+
+# personal data and local files
+history.json
+history.json.tmp
+burner.log
+*.lnk
+run.bat
