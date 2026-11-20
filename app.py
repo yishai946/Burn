@@ -111,14 +111,15 @@ class Api:
 
     # --- the queue: lists download in the background, then wait for the user to burn them ---
     # job states: queued -> downloading -> ready -> burning -> ready (next disc) ... -> done | error
-    def enqueue(self, tracks, name=None, url=None, fmt="audio"):
+    def enqueue(self, tracks, name=None, url=None, fmt="audio", only=False):
+        """only: download to a folder in Downloads, no burning."""
         if not tracks:
             return {"ok": False, "msg": "לא נבחרו שירים."}
         with self._lock:
             self._next_id += 1
             job = {"id": self._next_id, "name": name or "פלייליסט", "url": url, "fmt": "mp3" if fmt == "mp3" else "audio",
                    "tracks": tracks, "state": "queued", "i": 0, "n": len(tracks), "current": "", "skipped": [],
-                   "discs": [], "disc": 0, "msg": "", "files": [], "got": [], "tmp": None, "cancel": False}
+                   "discs": [], "disc": 0, "msg": "", "files": [], "got": [], "tmp": None, "cancel": False, "only": bool(only)}
             self._jobs.append(job)
         self._push()
         self._wake.set()
@@ -224,12 +225,12 @@ class Api:
         self._save()
 
     def _snapshot(self):
-        keep = ("id", "name", "fmt", "state", "i", "n", "current", "skipped", "disc", "msg")
+        keep = ("id", "name", "fmt", "only", "state", "i", "n", "current", "skipped", "disc", "msg")
         return [{**{k: j[k] for k in keep}, "discs": len(j["discs"]),
                  "disc_songs": len(j["discs"][j["disc"]]) if j["disc"] < len(j["discs"]) else 0} for j in self._jobs]
 
     QUEUE = os.path.join(core.DATA, "queue.json")
-    SAVED = ("id", "name", "url", "fmt", "tracks", "state", "skipped", "discs", "disc", "msg", "files", "got", "tmp")
+    SAVED = ("id", "name", "url", "fmt", "tracks", "state", "skipped", "discs", "disc", "msg", "files", "got", "tmp", "only")
 
     def _save(self):
         with self._lock:
@@ -253,6 +254,7 @@ class Api:
             try:
                 j["files"] = [f for f in j["files"] if os.path.exists(f[1])]  # downloaded songs that are still on disk
                 j["got"] = [i for i in j["got"] if any(f[1].endswith(f"{i:03d}.wav") or f[1].endswith(f"{i:03d}.mp3") for f in j["files"])]
+                j.setdefault("only", False)  # queues saved before download-only existed
                 j.update(i=0, n=len(j["tracks"]), current="", cancel=False, was_burning=j["state"] == "burning")
                 if j["state"] in ("downloading", "queued") or (j["state"] in ("ready", "burning") and len(j["got"]) + len(j["skipped"]) < j["n"]):
                     j["state"], j["discs"] = "queued", []
@@ -317,6 +319,9 @@ class Api:
                 job["state"] = "error"
                 job["msg"] = "אף שיר לא ירד." + (" הסיבה: " + job["skipped"][0].split(" – ", 1)[-1] if job["skipped"] else "")
                 return
+            if job["only"]:
+                self._export(job)
+                return
             # split for the disc in the drive if there is one (not while it is burning), else a standard 80 min / 700MB disc
             st = {}
             if not self.busy_burning():
@@ -334,6 +339,25 @@ class Api:
             job["state"], job["msg"] = "error", core.friendly_error(e)
         finally:
             self._push()
+
+    def _export(self, job):
+        """Download-only list: move the songs, numbered in order, to Downloads\<list name>, then open that folder."""
+        downloads = os.path.join(os.path.expanduser("~"), "Downloads")
+        base = os.path.join(downloads, core.safe_name(job["name"]) or "Burner")
+        out, n = base, 1
+        while os.path.exists(out):
+            n += 1
+            out = f"{base} ({n})"
+        os.makedirs(out)
+        for k, (t, p, _) in enumerate(job["files"], 1):
+            shutil.move(p, os.path.join(out, os.path.splitext(core.disc_name(k, t))[0] + os.path.splitext(p)[1]))
+        shutil.rmtree(job["tmp"], ignore_errors=True)
+        job["tmp"], job["files"] = None, []
+        job["state"], job["current"], job["i"], job["msg"] = "done", "", 0, f"נשמר בתיקייה {out}"
+        try:
+            os.startfile(out)
+        except OSError:
+            pass  # the path is in the message anyway
 
     def _burn(self, job):
         mp3 = job["fmt"] == "mp3"

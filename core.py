@@ -409,9 +409,14 @@ def burn_disc(wav_paths, on_track=None):
         pass
 
 
+def safe_name(s):
+    """Strip what Windows file names can't hold."""
+    return re.sub(r'[<>:"/\\|?*\x00-\x1f]', "", s).strip(" .")
+
+
 def disc_name(n, track):
     """File name on a data disc: the number keeps the playlist order (players sort by name)."""
-    base = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "", f"{n:02d} - {track['artist']} - {track['title']}").strip(" .")
+    base = safe_name(f"{n:02d} - {track['artist']} - {track['title']}")
     return base[:60].rstrip(" .") + ".mp3"  # Joliet allows 64 chars
 
 

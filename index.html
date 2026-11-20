@@ -387,6 +387,7 @@ body.has-foot .queue{bottom:96px}
 
 <footer id="foot" hidden>
   <div class="status" id="fstatus"></div>
+  <button class="ghost" id="dlonly" type="button" disabled>הורד בלבד, בלי לצרוב</button>
   <button class="primary burn" id="burn" type="button" disabled></button>
 </footer>
 
@@ -559,7 +560,7 @@ function render() {
   }
   $('rows').innerHTML = html;
   $('burn').innerHTML = DISC + `<span>${n > 1 ? `הורד והכן ${n} דיסקים` : 'הורד והכן לצריבה'}</span>`;
-  $('burn').disabled = !n;
+  $('burn').disabled = $('dlonly').disabled = !n;
 }
 
 // click toggles a song, drag reorders it
@@ -731,13 +732,15 @@ function modal(title, text, pct, buttons, done) {
 }
 const close = () => { $('modal').style.display = 'none'; S.busy = false; render(); poll(); history(); };
 
-$('burn').onclick = async () => {
+const enqueue = async only => {
   stopPlay();
-  const r = await pywebview.api.enqueue(selected().map(i => S.tracks[i]), S.name, S.url, S.fmt);
+  const r = await pywebview.api.enqueue(selected().map(i => S.tracks[i]), S.name, S.url, S.fmt, only);
   if (!r.ok) { modal('אי אפשר להוסיף לתור', r.msg, 0, [['אישור', close, true]]); return; }
   // the list now downloads in the background: free the screen for the next one
   qOpen = true; S.tracks = []; S.order = []; render(); history(); go('choose');
 };
+$('burn').onclick = () => enqueue(false);
+$('dlonly').onclick = () => enqueue(true);
 
 // ---- background queue (bottom-left popup) ----
 S.jobs = [];
@@ -750,6 +753,7 @@ function jobLine(j) {
   if (j.state === 'ready') return { text: j.msg || (S.ready ? `הכנס דיסק ריק${discOf} ולחץ צרוב` : `מחכה לדיסק ריק${discOf}`), pct: 100 };
   if (j.state === 'burning') return { text: j.fmt === 'mp3' ? `כותב ${j.disc_songs} שירים${discOf} · אל תוציא את הדיסק`
     : `שיר ${j.i + 1} מתוך ${j.disc_songs}${discOf} · אל תוציא את הדיסק`, pct: j.fmt === 'mp3' ? 50 : j.i / Math.max(1, j.disc_songs) * 100 };
+  if (j.state === 'done' && j.only) return { text: j.msg, pct: 100 };
   if (j.state === 'done') return { text: j.discs > 1 ? `${j.discs} דיסקים נצרבו` : 'הדיסק נצרב', pct: 100 };
   return { text: j.msg, pct: 0 };
 }
@@ -768,7 +772,7 @@ function renderQueue() {
     const canBurn = j.state === 'ready' && !burning;
     const skipped = j.skipped.length ? `<details class="qskip"><summary>${j.skipped.length === 1 ? 'שיר אחד דולג' : j.skipped.length + ' שירים דולגו'}</summary>${j.skipped.map(x => `<div>${esc(x)}</div>`).join('')}</details>` : '';
     return `<div class="qjob s-${j.state}">
-      <div class="qtop"><b dir="auto">${esc(j.name)}</b><span class="qtag">${j.fmt === 'mp3' ? 'MP3' : 'שמע'} · ${STATE[j.state]}</span></div>
+      <div class="qtop"><b dir="auto">${esc(j.name)}</b><span class="qtag">${j.fmt === 'mp3' ? 'MP3' : 'שמע'} · ${j.only && j.state === 'done' ? 'הורד' : STATE[j.state]}</span></div>
       <div class="qtext" dir="auto">${esc(l.text)}</div>
       ${j.state === 'done' || j.state === 'error' ? '' : `<div class="bar"><i style="width:${Math.min(100, l.pct)}%"></i></div>`}
       ${skipped}
