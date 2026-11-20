@@ -22,6 +22,10 @@ class Api:
         self._next_id = 0
         self._lock = threading.RLock()
         self._wake = threading.Event()
+        self._hold = False        # True while the user hasn't said what to do with lists from last time
+        self._hidden = False      # window hidden: work goes on in the background
+        self._quitting = False
+        self._restore()
         threading.Thread(target=self._downloader, daemon=True).start()
 
     # --- called from the UI ---
@@ -114,7 +118,7 @@ class Api:
             self._next_id += 1
             job = {"id": self._next_id, "name": name or "פלייליסט", "url": url, "fmt": "mp3" if fmt == "mp3" else "audio",
                    "tracks": tracks, "state": "queued", "i": 0, "n": len(tracks), "current": "", "skipped": [],
-                   "discs": [], "disc": 0, "msg": "", "files": [], "tmp": None, "cancel": False}
+                   "discs": [], "disc": 0, "msg": "", "files": [], "got": [], "tmp": None, "cancel": False}
             self._jobs.append(job)
         self._push()
         self._wake.set()
@@ -122,6 +126,55 @@ class Api:
 
     def jobs(self):
         return self._snapshot()
+
+    # --- lists left over from the last run (closed or killed mid-way) ---
+    def restored(self):
+        return {"count": len(self._jobs) if self._hold else 0,
+                "burning": any(j.get("was_burning") for j in self._jobs)}
+
+    def resume_restored(self):
+        self._hold = False
+        self._wake.set()
+        self._push()
+        return {"ok": True}
+
+    def clear_restored(self):
+        with self._lock:
+            for j in list(self._jobs):
+                self._remove(j)
+            self._hold = False
+        self._push()
+        return {"ok": True}
+
+    # --- closing the window ---
+    def _on_closing(self):
+        if self._quitting or not self.busy():
+            self._save()
+            return True  # nothing running (ready lists are saved and come back next time)
+        burning = self.busy_burning()
+        threading.Thread(target=lambda: self._window.evaluate_js(f"App.confirmClose({json.dumps(burning)})"), daemon=True).start()
+        return False     # keep the window until the user chooses
+
+    def close_choice(self, choice):
+        if choice == "background":
+            self._hidden = True
+            self._window.hide()
+        elif choice == "quit":
+            self._quitting = True
+            self._save()
+            self._window.destroy()
+        return {"ok": True}
+
+    def _show_if_hidden(self):
+        """Bring the window back when a hidden Burner has something for the user (a list ready, or all done)."""
+        ready = any(j["state"] == "ready" for j in self._jobs) and not self.busy_burning()
+        if self._hidden and (ready or not self.busy()):
+            self._hidden = False
+            try:
+                self._window.show()
+                self._window.restore()
+            except Exception:
+                pass
 
     def burn_job(self, job_id):
         """Burn the next disc of a downloaded list. Needs a blank disc in the drive."""
@@ -168,13 +221,54 @@ class Api:
             self._jobs.remove(job)
         if job["tmp"]:
             shutil.rmtree(job["tmp"], ignore_errors=True)
+        self._save()
 
     def _snapshot(self):
         keep = ("id", "name", "fmt", "state", "i", "n", "current", "skipped", "disc", "msg")
         return [{**{k: j[k] for k in keep}, "discs": len(j["discs"]),
                  "disc_songs": len(j["discs"][j["disc"]]) if j["disc"] < len(j["discs"]) else 0} for j in self._jobs]
 
+    QUEUE = os.path.join(core.DATA, "queue.json")
+    SAVED = ("id", "name", "url", "fmt", "tracks", "state", "skipped", "discs", "disc", "msg", "files", "got", "tmp")
+
+    def _save(self):
+        with self._lock:
+            data = [{k: j[k] for k in self.SAVED} for j in self._jobs if j["state"] != "done"]
+            try:
+                tmp = self.QUEUE + ".tmp"
+                with open(tmp, "w", encoding="utf-8") as f:
+                    json.dump(data, f, ensure_ascii=False)
+                os.replace(tmp, self.QUEUE)
+            except OSError as e:
+                core.friendly_error(e)  # logged; the queue still works for this run
+
+    def _restore(self):
+        """Lists from last time: downloads resume where they stopped; a burn cut off mid-way must start over."""
+        try:
+            with open(self.QUEUE, encoding="utf-8") as f:
+                saved = json.load(f)
+        except (OSError, ValueError):
+            return
+        for j in saved:
+            try:
+                j["files"] = [f for f in j["files"] if os.path.exists(f[1])]  # downloaded songs that are still on disk
+                j["got"] = [i for i in j["got"] if any(f[1].endswith(f"{i:03d}.wav") or f[1].endswith(f"{i:03d}.mp3") for f in j["files"])]
+                j.update(i=0, n=len(j["tracks"]), current="", cancel=False, was_burning=j["state"] == "burning")
+                if j["state"] in ("downloading", "queued") or (j["state"] in ("ready", "burning") and len(j["got"]) + len(j["skipped"]) < j["n"]):
+                    j["state"], j["discs"] = "queued", []
+                elif j["state"] == "burning":
+                    j["state"] = "ready"
+                    j["msg"] = "הצריבה נעצרה באמצע, והדיסק כנראה לא שמיש. הכנס דיסק ריק חדש ולחץ צרוב."
+                if j["state"] in ("queued", "ready", "error"):
+                    self._jobs.append(j)
+            except (KeyError, TypeError, IndexError):
+                continue  # a damaged entry is skipped, the rest still come back
+        self._next_id = max([j["id"] for j in self._jobs], default=0)
+        self._hold = bool(self._jobs)
+
     def _push(self):
+        self._save()
+        self._show_if_hidden()
         if self._window:
             try:
                 self._window.evaluate_js(f"App.jobs({json.dumps(self._snapshot(), ensure_ascii=False)})")
@@ -191,7 +285,7 @@ class Api:
             self._wake.clear()
             while True:
                 with self._lock:
-                    job = next((j for j in self._jobs if j["state"] == "queued"), None)
+                    job = None if self._hold else next((j for j in self._jobs if j["state"] == "queued"), None)
                     if not job:
                         break
                     job["state"] = "downloading"
@@ -199,9 +293,13 @@ class Api:
 
     def _download(self, job):
         mp3 = job["fmt"] == "mp3"
-        job["tmp"] = tempfile.mkdtemp(prefix="cdburn_")
+        if not job["tmp"]:
+            job["tmp"] = os.path.join(core.DATA, "jobs", str(job["id"]))
+        os.makedirs(job["tmp"], exist_ok=True)
         try:
             for i, t in enumerate(job["tracks"]):
+                if i in job["got"] or any(x.startswith(t["title"] + " – ") for x in job["skipped"]):
+                    continue  # done before Burner was closed
                 if job["cancel"]:
                     with self._lock:
                         self._remove(job)
@@ -211,8 +309,10 @@ class Api:
                 try:
                     p = core.download_track(t, os.path.join(job["tmp"], f"{i:03d}"), "mp3" if mp3 else "audio")
                     job["files"].append((t, p, os.path.getsize(p) if mp3 else core.wav_seconds(p)))
+                    job["got"].append(i)
                 except Exception as e:
                     job["skipped"].append(f"{t['title']} – {core.friendly_error(e)}")
+            job["files"].sort(key=lambda f: next((n for n, t in enumerate(job["tracks"]) if t == f[0]), 0))
             if not job["files"]:
                 job["state"] = "error"
                 job["msg"] = "אף שיר לא ירד." + (" הסיבה: " + job["skipped"][0].split(" – ", 1)[-1] if job["skipped"] else "")
@@ -333,6 +433,7 @@ if __name__ == "__main__":
     api._window = webview.create_window(
         "Burner", os.path.join(HERE, "index.html"),
         js_api=api, width=1200, height=860, min_size=(560, 600), background_color="#0e0e10", maximized=True)
+    api._window.events.closing += api._on_closing
     # private_mode=False keeps localStorage (theme choice) between runs; icon sets the window + taskbar icon
     webview.start(private_mode=False, icon=os.path.join(HERE, "icon.ico"))
     # hard exit once the window is closed: a lingering thread must not leave a windowless
