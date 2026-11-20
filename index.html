@@ -71,7 +71,7 @@ main>*{direction:rtl}
 main{flex:1;overflow-y:auto}
 
 /* start */
-.hero{max-width:720px;margin:0 auto;padding:64px 24px 40px;display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center}
+.hero{max-width:720px;margin:0 auto;padding:40px 0 40px;display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center}
 .hero h1{font-size:36px;font-weight:800;letter-spacing:-.01em;margin-top:6px}
 .hero p{color:var(--muted);font-size:17px;max-width:540px}
 .form{width:100%;display:flex;flex-direction:column;gap:8px;margin-top:22px;text-align:start}
@@ -155,16 +155,19 @@ input[type=url]:focus{border-color:var(--accent)}
 .tr.burned{background:var(--warn-bg)}
 .tr.burned+.tr,.tr+.tr.burned{border-top-color:transparent}
 .tag{flex:none;max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:700;color:var(--warn);border:1px solid currentColor}
-.recent{width:100%;display:flex;flex-direction:column;gap:12px;margin-top:28px;text-align:start}
+.startwrap{display:flex;flex-wrap:wrap;align-items:flex-start;gap:24px;padding:24px 28px}
+.startwrap .hero{flex:999 1 480px;min-width:0}
+.recent{flex:1 1 260px;max-width:320px;display:flex;flex-direction:column;gap:12px;text-align:start;position:sticky;top:0;
+  background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px}
 .recent h2{font-size:15px;font-weight:700}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
-.grid button{display:flex;flex-direction:column;align-items:flex-start;gap:3px;padding:14px 16px;border-radius:14px;background:var(--surface);border:1px solid var(--line);text-align:start}
-.grid button:hover{border-color:var(--accent)}
+.grid{display:flex;flex-direction:column;gap:4px}
+.grid button{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:10px 12px;border-radius:10px;background:none;border:1px solid transparent;text-align:start;width:100%}
+.grid button:hover{background:var(--surface2);border-color:var(--line)}
 .grid b{font-weight:700;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .grid span{color:var(--muted);font-size:13px}
 .grid span span{white-space:nowrap}
-.pager{display:flex;align-items:center;justify-content:center;gap:12px;font-size:14px;color:var(--muted)}
-.pager button{height:36px;padding:0 14px;border-radius:10px;background:var(--surface);border:1px solid var(--line2);color:var(--text)}
+.pager{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13px;color:var(--muted);border-top:1px solid var(--line);padding-top:10px}
+.pager button{height:32px;padding:0 10px;border-radius:10px;background:var(--surface);border:1px solid var(--line2);color:var(--text)}
 .play{width:30px;height:30px;border-radius:50%;background:none;border:1px solid var(--line2);display:grid;place-items:center;flex:none}
 .play svg{width:11px;height:11px;fill:currentColor}
 .play:hover,.play.on{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
@@ -178,6 +181,29 @@ footer .status{flex:1 1 220px;font-size:14px;color:var(--muted)}
 footer .status b{color:var(--text)}
 .burn svg{width:19px;height:19px;stroke:currentColor;fill:none;stroke-width:2}
 .burn{display:flex;align-items:center;gap:10px}
+
+/* disc format picker (start screen) + its explainer */
+.fmt{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:10px;margin-top:4px}
+.fmt>span{color:var(--muted);font-size:14px;font-weight:600}
+.seg{display:inline-flex;flex-wrap:wrap;padding:4px;border-radius:12px;background:var(--surface);border:1px solid var(--line)}
+.seg label{position:relative;padding:8px 14px;border-radius:9px;cursor:pointer;font-weight:600;font-size:14px;color:var(--muted)}
+.seg input{position:absolute;inset:0;margin:0;opacity:0;cursor:pointer}
+.seg label:has(input:checked){background:var(--accent);color:var(--on-accent)}
+.seg label:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:2px}
+.qm{width:32px;height:32px;border-radius:50%;background:var(--surface);border:1px solid var(--line2);font-weight:800;color:var(--muted)}
+.qm:hover{color:var(--text);border-color:var(--accent)}
+#fmtdlg{border:0;padding:0;background:none;color:inherit;width:calc(100% - 32px);max-width:660px;margin:auto}
+#fmtdlg::backdrop{background:color-mix(in srgb,var(--bg) 80%,transparent);backdrop-filter:blur(6px)}
+#fmtdlg .dlg{max-width:none;text-align:start;align-items:stretch;gap:14px}
+.cmp{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.cmp section{border:1px solid var(--line);border-radius:14px;padding:16px;background:var(--bg)}
+.cmp h4{font-size:17px;font-weight:800}
+.cmp .cap{color:var(--accent);font-weight:700;font-size:14px;margin:2px 0 12px}
+.cmp ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;font-size:14px}
+.cmp li{display:flex;gap:8px}
+.cmp li::before{flex:none;width:12px;font-weight:800}
+.cmp .pro::before{content:'+';color:var(--ok)}
+.cmp .con::before{content:'−';color:var(--bad)}
 
 /* modal */
 #modal{position:fixed;inset:0;background:color-mix(in srgb,var(--bg) 80%,transparent);backdrop-filter:blur(6px);
@@ -224,11 +250,21 @@ footer .status b{color:var(--text)}
 </div>
 
 <main>
-  <section class="hero" id="start">
+  <section class="startwrap" id="start">
+    <aside class="recent" id="recent" aria-labelledby="recent-h" hidden>
+      <h2 id="recent-h">נצרבו לאחרונה</h2>
+      <div class="grid" id="rgrid"></div>
+      <nav class="pager" id="pager" aria-label="עמודי היסטוריה">
+        <button type="button" id="pprev">הקודם</button>
+        <span id="pinfo"></span>
+        <button type="button" id="pnext">הבא</button>
+      </nav>
+    </aside>
+  <div class="hero">
     <div class="page" id="p-choose">
       <svg width="84" height="84" viewBox="0 0 88 88" fill="none" aria-hidden="true"><circle cx="44" cy="44" r="42" stroke="var(--line2)" stroke-width="2"/><circle cx="44" cy="44" r="30" stroke="var(--line)" stroke-width="2"/><circle cx="44" cy="44" r="10" stroke="var(--accent)" stroke-width="2.5"/><path d="M44 2a42 42 0 0 1 42 42" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round"/></svg>
       <h1>מפלייליסט לדיסק, בלחיצה אחת</h1>
-      <p>Burner מוריד את השירים, מחלק אותם לדיסקים של 80 דקות וצורב לפי הסדר. איך תרצה להתחיל?</p>
+      <p>Burner מוריד את השירים, מחלק אותם לדיסקים וצורב לפי הסדר. איך תרצה להתחיל?</p>
       <div class="choices">
         <button class="choice" type="button" data-go="link">
           <span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg></span>
@@ -239,15 +275,14 @@ footer .status b{color:var(--text)}
           <b>מחיפוש שירים</b><span>בנה רשימה משלך, שיר אחרי שיר</span>
         </button>
       </div>
-      <section class="recent" id="recent" aria-labelledby="recent-h" hidden>
-        <h2 id="recent-h">נצרבו לאחרונה</h2>
-        <div class="grid" id="rgrid"></div>
-        <nav class="pager" id="pager" aria-label="עמודי היסטוריה">
-          <button type="button" id="pprev">הקודם</button>
-          <span id="pinfo"></span>
-          <button type="button" id="pnext">הבא</button>
-        </nav>
-      </section>
+      <div class="fmt">
+        <span id="fmt-l">סוג דיסק</span>
+        <div class="seg" role="radiogroup" aria-labelledby="fmt-l">
+          <label><input type="radio" name="fmt" value="audio">דיסק שמע · 80 דק׳</label>
+          <label><input type="radio" name="fmt" value="mp3">דיסק MP3 · כ־8 שעות</label>
+        </div>
+        <button class="qm" id="fmtq" type="button" aria-label="מה ההבדל בין סוגי הדיסקים?" title="מה ההבדל?">?</button>
+      </div>
     </div>
 
     <div class="page" id="p-link" hidden>
@@ -278,6 +313,7 @@ footer .status b{color:var(--text)}
         </div>
       </div>
     </div>
+  </div>
   </section>
 
   <div class="work" id="work" hidden>
@@ -325,10 +361,39 @@ footer .status b{color:var(--text)}
   <div class="row" id="mbtn"></div>
 </div></div>
 
+<dialog id="fmtdlg" aria-labelledby="fmt-t"><div class="dlg">
+  <h3 id="fmt-t">דיסק שמע או דיסק MP3?</h3>
+  <div class="cmp">
+    <section>
+      <h4>דיסק שמע</h4><div class="cap">עד 80 דקות · כ־18 שירים</div>
+      <ul>
+        <li class="pro">מתנגן בכל נגן דיסקים, גם בישן ביותר</li>
+        <li class="pro">איכות דיסק מלאה, בלי דחיסה</li>
+        <li class="con">רק 80 דקות, אז פלייליסט ארוך צריך כמה דיסקים</li>
+        <li class="con">הנגן מציג רק מספר רצועה, בלי שם שיר</li>
+      </ul>
+    </section>
+    <section>
+      <h4>דיסק MP3</h4><div class="cap">כ־8 שעות · כ־120 שירים</div>
+      <ul>
+        <li class="pro">פי 6 יותר שירים, בדרך כלל כל הפלייליסט בדיסק אחד</li>
+        <li class="pro">נגן שתומך מציג שם שיר ואמן</li>
+        <li class="con">מתנגן רק בנגן שתומך ב־MP3. רוב מערכות הרכב מ־2005 ואילך כן, נגנים ישנים לא</li>
+        <li class="con">דחוס (192kbps): קשה לשמוע הבדל ברכב, אבל זו לא איכות דיסק מלאה</li>
+      </ul>
+    </section>
+  </div>
+  <p>לא בטוח? חפש "MP3" על הנגן או בחוברת שלו. אם אין, בחר דיסק שמע.</p>
+  <div class="row"><button class="primary" id="fmtok" type="button">הבנתי</button></div>
+</div></dialog>
+
 <script>
 const $ = id => document.getElementById(id);
 const CAP0 = 79 * 60, GAP = 2;
-const fmt = s => { s = Math.round(s); return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`; };
+// MP3 disc: constant 192kbps, so a disc holds bytes / MP3_BPS seconds; 96% as in core.burner_status
+const MP3_BPS = 192 * 125, MP3_CAP0 = Math.floor(359849 * 2048 * 0.96 / MP3_BPS);  // blank 80-min CD-R
+const fmt = s => { s = Math.round(s); const h = Math.floor(s / 3600), ss = String(s % 60).padStart(2, '0');
+  return h ? `${h}:${String(Math.floor(s / 60) % 60).padStart(2, '0')}:${ss}` : `${Math.floor(s / 60)}:${ss}`; };
 const esc = s => s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const CHECK = '<svg viewBox="0 0 12 12"><path d="M2 6.5l2.5 2.5L10 3.5"/></svg>';
 const DISC = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5"/></svg>';
@@ -350,13 +415,28 @@ $('theme').onclick = () => {
 };
 paintTheme();
 
-const S = { tracks: [], sel: new Set(), order: [], cap: CAP0, ready: false, busy: false };
+const S = { tracks: [], sel: new Set(), order: [], cap: CAP0, ready: false, busy: false, fmt: 'audio', st: null };
+try { if (localStorage.getItem('fmt') === 'mp3') S.fmt = 'mp3'; } catch (e) {}
+function setCap(s) {                       // S.cap in seconds for the chosen disc type and the disc in the drive
+  if (s) S.st = s;
+  const st = S.st || {};
+  S.cap = S.fmt === 'mp3' ? (st.cap_bytes ? Math.floor(st.cap_bytes / MP3_BPS) : MP3_CAP0)
+                          : (st.cap_s ? Math.min(CAP0, st.cap_s - 60) : CAP0);
+}
+setCap();
+document.querySelectorAll('input[name=fmt]').forEach(r => {
+  r.checked = r.value === S.fmt;
+  r.onchange = () => { S.fmt = r.value; try { localStorage.setItem('fmt', S.fmt); } catch (e) {} setCap(); render(); };
+});
+$('fmtq').onclick = () => $('fmtdlg').showModal();
+$('fmtok').onclick = () => $('fmtdlg').close();
+$('fmtdlg').onclick = e => { if (e.target === $('fmtdlg')) $('fmtdlg').close(); };  // click outside the card
 const secs = i => Math.round(S.tracks[i].ms / 1000);
 
 function plan(idx) {                       // same rule as core.plan_discs
   const discs = []; let cur = [], used = 0;
   for (const i of idx) {
-    const need = secs(i) + GAP;
+    const need = secs(i) + (S.fmt === 'mp3' ? 0 : GAP);
     if (cur.length && used + need > S.cap) { discs.push({ items: cur, used }); cur = []; used = 0; }
     cur.push(i); used += need;
   }
@@ -403,7 +483,7 @@ function render() {
   const has = S.tracks.length > 0;
   $('start').hidden = has; $('work').hidden = !has; $('foot').hidden = !has;
   if (!has) return;
-  const idx = selected(), discs = plan(idx), full = S.cap + 60, n = discs.length;
+  const idx = selected(), discs = plan(idx), full = S.cap + (S.fmt === 'mp3' ? 0 : 60), n = discs.length;
   const total = idx.reduce((a, i) => a + secs(i), 0);
   $('pmeta').textContent = `${S.tracks.length} שירים · ${fmt(S.tracks.reduce((a, t) => a + t.ms / 1000, 0))}`;
   $('discs').innerHTML = discs.map((d, k) => `<div class="disc"><div class="h"><b>דיסק ${k + 1}</b><span class="mono" dir="ltr">${fmt(d.used)} / ${fmt(full)}</span></div>
@@ -412,10 +492,10 @@ function render() {
   // a nearly empty last disc wastes a blank: say how much to cut to save it
   const last = discs[n - 1], over = discs.reduce((a, d) => a + d.used, 0) - (n - 1) * S.cap;
   const b = $('banner'); b.hidden = n < 2;
-  if (n > 1) b.textContent = last.used < 15 * 60
+  if (n > 1) b.textContent = last.used < S.cap / 5
     ? `דיסק ${n} יכיל רק ${last.items.length === 1 ? 'שיר אחד' : last.items.length + ' שירים'} (${fmt(last.used)}). כדי לחסוך דיסק, בטל עוד כ־${fmt(over)} של שירים.`
     : `יידרשו ${n} דיסקים ריקים. תתבקש להכניס כל אחד כשיגיע תורו.`;
-  $('fstatus').innerHTML = `<b>${idx.length}</b> שירים · <span class="mono" dir="ltr">${fmt(total)}</span> · ${n ? discWord(n) : '—'}`;
+  $('fstatus').innerHTML = `<b>${idx.length}</b> שירים · <span class="mono" dir="ltr">${fmt(total)}</span> · ${n ? discWord(n) : '—'} · ${S.fmt === 'mp3' ? 'MP3' : 'שמע'}`;
 
   const old = S.tracks.filter(t => t.burned).length;
   $('summary').textContent = `${idx.length} מתוך ${S.tracks.length} נבחרו · לחץ לבחירה, גרור לשינוי הסדר` + (old ? ` · ${old} כבר נצרבו בעבר` : '');
@@ -485,7 +565,7 @@ function go(page) {
 $('start').addEventListener('click', e => { const b = e.target.closest('[data-go]'); if (b) go(b.dataset.go); });
 
 let recent = [], page = 0;
-const PAGE = 6;
+const PAGE = 8;
 async function history() { recent = await pywebview.api.history(); page = 0; paintRecent(); }
 function paintRecent() {
   const pages = Math.ceil(recent.length / PAGE);
@@ -577,8 +657,8 @@ async function poll() {
   if (S.busy) return;
   const s = await pywebview.api.status();
   S.ready = s.state === 'ready';
-  const cap = s.cap_s ? Math.min(CAP0, s.cap_s - 60) : CAP0;
-  const changed = cap !== S.cap; S.cap = cap;
+  const old = S.cap; setCap(s);
+  const changed = old !== S.cap;
   $('chip').className = 'chip ' + (S.ready ? 'ready' : s.state === 'no_drive' || s.state === 'unsupported' ? 'bad' : 'warn');
   $('chip').lastElementChild.textContent = s.text;
   if (changed && S.tracks.length) render();
@@ -599,7 +679,7 @@ const close = () => { $('modal').style.display = 'none'; S.busy = false; render(
 
 $('burn').onclick = async () => {
   stopPlay();
-  const r = await pywebview.api.burn(selected().map(i => S.tracks[i]), S.name, S.url);
+  const r = await pywebview.api.burn(selected().map(i => S.tracks[i]), S.name, S.url, S.fmt);
   if (!r.ok) { modal('אי אפשר להתחיל', r.msg, 0, [['אישור', close, true]]); return; }
   S.busy = true; modal('מתחיל…', '', 0, [['ביטול', () => pywebview.api.abort()]]);
 };
@@ -609,7 +689,8 @@ window.App = { progress(p) {
   if (p.phase === 'download') modal('מוריד שירים', `${p.i + 1} מתוך ${p.n} · ${p.name}`, p.i / p.n * 100, [cancel]);
   else if (p.phase === 'insert') modal(`הכנס דיסק ריק (${p.disc} מתוך ${p.of})`, 'הצריבה תמשיך לבד כשיזוהה דיסק ריק.', 0,
     [['המשך', () => pywebview.api.proceed(), true], cancel]);
-  else if (p.phase === 'burn') modal(`צורב דיסק ${p.disc} מתוך ${p.of}`, `שיר ${p.i + 1} מתוך ${p.n} · אל תוציא את הדיסק`, p.i / p.n * 100, []);
+  else if (p.phase === 'burn') modal(`צורב דיסק ${p.disc} מתוך ${p.of}`, S.fmt === 'mp3'
+    ? `כותב ${p.n} שירים, זה לוקח כמה דקות · אל תוציא את הדיסק` : `שיר ${p.i + 1} מתוך ${p.n} · אל תוציא את הדיסק`, p.i / p.n * 100, []);
   else if (p.phase === 'done') modal('הצריבה הושלמה', (p.discs > 1 ? `${p.discs} דיסקים נצרבו.` : 'הדיסק נצרב.') +
     (p.skipped.length ? ` דולגו ${p.skipped.length}: ` + p.skipped.join('; ') : ''), 100, [['סגור', close, true]], true);
   else if (p.phase === 'cancelled') close();
@@ -633,7 +714,8 @@ function tour(which) {
   ] : [
     { popover: { title: 'ברוך הבא ל־Burner', description: 'Burner צורב שירים לדיסק שמע שמתנגן בכל נגן: ברכב, במערכת או בדיסקמן. סיור קצר של כמה צעדים.' } },
     step('.choices', 'בחר איך להתחיל', 'הדבק קישור לפלייליסט מ־Spotify או Apple Music, או חפש שירים ובנה רשימה משלך.', 'top'),
-    visible('#recent') && step('#recent', 'נצרבו לאחרונה', 'פלייליסטים שצרבת. לחיצה טוענת אותם שוב.', 'top'),
+    step('.fmt', 'סוג דיסק', 'דיסק שמע מתנגן בכל נגן, עד 80 דקות. דיסק MP3 מחזיק כ־8 שעות, אבל רק לנגן שתומך ב־MP3. סימן השאלה מסביר את ההבדל.', 'top'),
+    visible('#recent') && step('#recent', 'נצרבו לאחרונה', 'פלייליסטים שצרבת. לחיצה טוענת אותם שוב.', 'left'),
     step('#chip', 'מצב הצורב', 'נקודה ירוקה: יש דיסק ריק ואפשר לצרוב. כתומה או אדומה: צריך להכניס דיסק או לחבר צורב.', 'bottom'),
     step('#theme', 'בהיר או כהה', 'מחליף בין ערכת המערכת, בהיר וכהה.', 'bottom'),
     step('#help', 'עזרה', 'אפשר להפעיל את הסיור שוב בכל רגע מכאן. במסך השירים יש סיור משלו.', 'bottom'),

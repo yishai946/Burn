@@ -103,7 +103,7 @@ class Api:
     def status(self):
         return core.burner_status()
 
-    def burn(self, tracks, name=None, url=None):
+    def burn(self, tracks, name=None, url=None, fmt="audio"):
         if self._busy:
             return {"ok": False, "msg": "כבר צורב."}
         st = core.burner_status()
@@ -112,7 +112,9 @@ class Api:
         self._cancel, self._busy = False, True
         self._cont.clear()
         pl = {"name": name or "Playlist", "url": url, "count": len(tracks), "at": time.strftime("%Y-%m-%d")}
-        threading.Thread(target=self._run, args=(tracks, st["cap_s"], pl), daemon=True).start()
+        mp3 = fmt == "mp3"
+        cap = st["cap_bytes"] if mp3 else min(core.DEFAULT_CAP, st["cap_s"] - 60)
+        threading.Thread(target=self._run, args=(tracks, cap, pl, mp3), daemon=True).start()
         return {"ok": True}
 
     def proceed(self):
@@ -126,23 +128,23 @@ class Api:
     def _emit(self, **kw):
         self._window.evaluate_js(f"App.progress({json.dumps(kw)})")
 
-    def _run(self, tracks, cap_s, pl):
+    def _run(self, tracks, cap, pl, mp3=False):
+        """cap: seconds for an audio CD, bytes for an MP3 data disc."""
         tmp = tempfile.mkdtemp(prefix="cdburn_")
         try:
-            cap = min(core.DEFAULT_CAP, cap_s - 60)
-            files, skipped = [], []  # files: (track, path, seconds)
+            files, skipped = [], []  # files: (track, path, seconds or bytes)
             for i, t in enumerate(tracks):
                 if self._cancel:
                     return self._emit(phase="cancelled")
                 self._emit(phase="download", i=i, n=len(tracks), name=f"{t['artist']} – {t['title']}")
                 try:
-                    p = core.download_track(t, os.path.join(tmp, f"{i:03d}"))
-                    files.append((t, p, core.wav_seconds(p)))
+                    p = core.download_track(t, os.path.join(tmp, f"{i:03d}"), "mp3" if mp3 else "audio")
+                    files.append((t, p, os.path.getsize(p) if mp3 else core.wav_seconds(p)))
                 except Exception as e:
                     skipped.append(f"{t['title']}: {e}")
             if not files:
                 return self._emit(phase="error", msg="אף שיר לא ירד.")
-            discs = core.plan_discs([f[2] for f in files], cap)
+            discs = core.plan_discs([f[2] for f in files], cap, 0 if mp3 else core.GAP)
             for d, idx in enumerate(discs):
                 if d > 0:
                     self._emit(phase="insert", disc=d + 1, of=len(discs))
@@ -154,8 +156,15 @@ class Api:
                         self._cont.wait(2)
                         self._cont.clear()
                 self._emit(phase="burn", disc=d + 1, of=len(discs), i=0, n=len(idx))
-                core.burn_disc([files[k][1] for k in idx],
-                               lambda i, d=d, n=len(idx): self._emit(phase="burn", disc=d + 1, of=len(discs), i=i, n=n))
+                if mp3:  # the disc gets exactly this folder: numbered, readable names
+                    folder = os.path.join(tmp, f"disc{d + 1}")
+                    os.makedirs(folder)
+                    for n, k in enumerate(idx, 1):
+                        os.replace(files[k][1], os.path.join(folder, core.disc_name(n, files[k][0])))
+                    core.burn_data_disc(folder)
+                else:
+                    core.burn_disc([files[k][1] for k in idx],
+                                   lambda i, d=d, n=len(idx): self._emit(phase="burn", disc=d + 1, of=len(discs), i=i, n=n))
                 try:  # only songs on a disc that finished burning count as burned
                     pl["discs"] = len(discs)
                     core.record_burn([files[k][0] for k in idx], pl)
