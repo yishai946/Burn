@@ -18,9 +18,11 @@ import webview
 class Api:
     def __init__(self):
         self._window = None
-        self._cancel = False
-        self._cont = threading.Event()
-        self._busy = False
+        self._jobs = []           # the queue, oldest first
+        self._next_id = 0
+        self._lock = threading.RLock()
+        self._wake = threading.Event()
+        threading.Thread(target=self._downloader, daemon=True).start()
 
     # --- called from the UI ---
     def load(self, url):
@@ -66,8 +68,8 @@ class Api:
             return None  # offline or GitHub unreachable: just skip
 
     def update(self, info):
-        if self._busy:
-            return {"ok": False, "msg": "אי אפשר לעדכן באמצע צריבה."}
+        if self.busy():
+            return {"ok": False, "msg": "אי אפשר לעדכן בזמן הורדה או צריבה. נסה שוב כשהתור יסתיים."}
         threading.Thread(target=self._update, args=(info,), daemon=True).start()
         return {"ok": True}
 
@@ -103,79 +105,173 @@ class Api:
     def status(self):
         return core.burner_status()
 
-    def burn(self, tracks, name=None, url=None, fmt="audio"):
-        if self._busy:
-            return {"ok": False, "msg": "כבר צורב."}
-        st = core.burner_status()
-        if st["state"] != "ready":
-            return {"ok": False, "msg": st["text"]}
-        self._cancel, self._busy = False, True
-        self._cont.clear()
-        pl = {"name": name or "פלייליסט", "url": url, "count": len(tracks), "at": time.strftime("%Y-%m-%d")}
-        mp3 = fmt == "mp3"
-        cap = st["cap_bytes"] if mp3 else min(core.DEFAULT_CAP, st["cap_s"] - 60)
-        threading.Thread(target=self._run, args=(tracks, cap, pl, mp3), daemon=True).start()
+    # --- the queue: lists download in the background, then wait for the user to burn them ---
+    # job states: queued -> downloading -> ready -> burning -> ready (next disc) ... -> done | error
+    def enqueue(self, tracks, name=None, url=None, fmt="audio"):
+        if not tracks:
+            return {"ok": False, "msg": "לא נבחרו שירים."}
+        with self._lock:
+            self._next_id += 1
+            job = {"id": self._next_id, "name": name or "פלייליסט", "url": url, "fmt": "mp3" if fmt == "mp3" else "audio",
+                   "tracks": tracks, "state": "queued", "i": 0, "n": len(tracks), "current": "", "skipped": [],
+                   "discs": [], "disc": 0, "msg": "", "files": [], "tmp": None, "cancel": False}
+            self._jobs.append(job)
+        self._push()
+        self._wake.set()
+        return {"ok": True, "id": job["id"]}
+
+    def jobs(self):
+        return self._snapshot()
+
+    def burn_job(self, job_id):
+        """Burn the next disc of a downloaded list. Needs a blank disc in the drive."""
+        with self._lock:
+            job = self._job(job_id)
+            if not job or job["state"] != "ready":
+                return {"ok": False, "msg": "הרשימה הזו לא מוכנה לצריבה."}
+            if self.busy_burning():
+                return {"ok": False, "msg": "כבר צורבים דיסק אחר. חכה שהצריבה תסתיים."}
+            st = core.burner_status()
+            if st["state"] != "ready":
+                return {"ok": False, "msg": st["text"]}
+            job["state"], job["i"], job["msg"] = "burning", 0, ""
+        self._push()
+        threading.Thread(target=self._burn, args=(job,), daemon=True).start()
         return {"ok": True}
 
-    def proceed(self):
-        self._cont.set()
+    def cancel_job(self, job_id):
+        with self._lock:
+            job = self._job(job_id)
+            if not job:
+                return {"ok": True}
+            if job["state"] == "burning":
+                return {"ok": False, "msg": "אי אפשר לעצור באמצע צריבה, כדי לא להרוס את הדיסק."}
+            if job["state"] == "downloading":
+                job["cancel"] = True  # the downloader stops after the current song and removes the list
+            else:
+                self._remove(job)
+        self._push()
+        return {"ok": True}
 
-    def abort(self):
-        self._cancel = True
-        self._cont.set()
+    def busy(self):
+        return any(j["state"] in ("downloading", "burning") for j in self._jobs)
 
-    # --- worker ---
+    def busy_burning(self):
+        return any(j["state"] == "burning" for j in self._jobs)
+
+    # --- worker side ---
+    def _job(self, job_id):
+        return next((j for j in self._jobs if j["id"] == job_id), None)
+
+    def _remove(self, job):
+        if job in self._jobs:
+            self._jobs.remove(job)
+        if job["tmp"]:
+            shutil.rmtree(job["tmp"], ignore_errors=True)
+
+    def _snapshot(self):
+        keep = ("id", "name", "fmt", "state", "i", "n", "current", "skipped", "disc", "msg")
+        return [{**{k: j[k] for k in keep}, "discs": len(j["discs"]),
+                 "disc_songs": len(j["discs"][j["disc"]]) if j["disc"] < len(j["discs"]) else 0} for j in self._jobs]
+
+    def _push(self):
+        if self._window:
+            try:
+                self._window.evaluate_js(f"App.jobs({json.dumps(self._snapshot(), ensure_ascii=False)})")
+            except Exception:
+                pass  # window closing
+
     def _emit(self, **kw):
         self._window.evaluate_js(f"App.progress({json.dumps(kw)})")
 
-    def _run(self, tracks, cap, pl, mp3=False):
-        """cap: seconds for an audio CD, bytes for an MP3 data disc."""
-        tmp = tempfile.mkdtemp(prefix="cdburn_")
+    def _downloader(self):
+        """Downloads one list at a time, in the order they were added."""
+        while True:
+            self._wake.wait()
+            self._wake.clear()
+            while True:
+                with self._lock:
+                    job = next((j for j in self._jobs if j["state"] == "queued"), None)
+                    if not job:
+                        break
+                    job["state"] = "downloading"
+                self._download(job)
+
+    def _download(self, job):
+        mp3 = job["fmt"] == "mp3"
+        job["tmp"] = tempfile.mkdtemp(prefix="cdburn_")
         try:
-            files, skipped = [], []  # files: (track, path, seconds or bytes)
-            for i, t in enumerate(tracks):
-                if self._cancel:
-                    return self._emit(phase="cancelled")
-                self._emit(phase="download", i=i, n=len(tracks), name=f"{t['artist']} – {t['title']}")
+            for i, t in enumerate(job["tracks"]):
+                if job["cancel"]:
+                    with self._lock:
+                        self._remove(job)
+                    return
+                job["i"], job["current"] = i, f"{t['artist']} – {t['title']}"
+                self._push()
                 try:
-                    p = core.download_track(t, os.path.join(tmp, f"{i:03d}"), "mp3" if mp3 else "audio")
-                    files.append((t, p, os.path.getsize(p) if mp3 else core.wav_seconds(p)))
+                    p = core.download_track(t, os.path.join(job["tmp"], f"{i:03d}"), "mp3" if mp3 else "audio")
+                    job["files"].append((t, p, os.path.getsize(p) if mp3 else core.wav_seconds(p)))
                 except Exception as e:
-                    skipped.append(f"{t['title']} – {core.friendly_error(e)}")
-            if not files:
-                return self._emit(phase="error", msg="אף שיר לא ירד, אז לא נצרב כלום." + (" הסיבה: " + skipped[0].split(" – ", 1)[-1] if skipped else ""))
-            discs = core.plan_discs([f[2] for f in files], cap, 0 if mp3 else core.GAP)
-            for d, idx in enumerate(discs):
-                if d > 0:
-                    self._emit(phase="insert", disc=d + 1, of=len(discs))
-                    while True:  # wait for a blank disc (auto-detects, or the user presses Continue)
-                        if self._cancel:
-                            return self._emit(phase="cancelled")
-                        if core.burner_status()["state"] == "ready":
-                            break
-                        self._cont.wait(2)
-                        self._cont.clear()
-                self._emit(phase="burn", disc=d + 1, of=len(discs), i=0, n=len(idx))
-                if mp3:  # the disc gets exactly this folder: numbered, readable names
-                    folder = os.path.join(tmp, f"disc{d + 1}")
-                    os.makedirs(folder)
-                    for n, k in enumerate(idx, 1):
-                        os.replace(files[k][1], os.path.join(folder, core.disc_name(n, files[k][0])))
-                    core.burn_data_disc(folder)
-                else:
-                    core.burn_disc([files[k][1] for k in idx],
-                                   lambda i, d=d, n=len(idx): self._emit(phase="burn", disc=d + 1, of=len(discs), i=i, n=n))
-                try:  # only songs on a disc that finished burning count as burned
-                    pl["discs"] = len(discs)
-                    core.record_burn([files[k][0] for k in idx], pl)
+                    job["skipped"].append(f"{t['title']} – {core.friendly_error(e)}")
+            if not job["files"]:
+                job["state"] = "error"
+                job["msg"] = "אף שיר לא ירד." + (" הסיבה: " + job["skipped"][0].split(" – ", 1)[-1] if job["skipped"] else "")
+                return
+            # split for the disc in the drive if there is one (not while it is burning), else a standard 80 min / 700MB disc
+            st = {}
+            if not self.busy_burning():
+                try:
+                    st = core.burner_status()
                 except Exception:
-                    pass
-            self._emit(phase="done", discs=len(discs), skipped=skipped)
+                    st = {}
+            if mp3:
+                cap = st.get("cap_bytes") or 700 * 1024 * 1024 * 96 // 100
+            else:
+                cap = min(core.DEFAULT_CAP, st["cap_s"] - 60) if st.get("cap_s") else core.DEFAULT_CAP
+            job["discs"] = core.plan_discs([f[2] for f in job["files"]], cap, 0 if mp3 else core.GAP)
+            job["state"], job["current"], job["i"] = "ready", "", 0
         except Exception as e:
-            self._emit(phase="error", msg=core.friendly_error(e))
+            job["state"], job["msg"] = "error", core.friendly_error(e)
         finally:
-            self._busy = False
-            shutil.rmtree(tmp, ignore_errors=True)
+            self._push()
+
+    def _burn(self, job):
+        mp3 = job["fmt"] == "mp3"
+        d, idx = job["disc"], job["discs"][job["disc"]]
+        files = job["files"]
+        try:
+            if mp3:  # the disc gets exactly this folder: numbered, readable names
+                folder = os.path.join(job["tmp"], f"disc{d + 1}")
+                os.makedirs(folder, exist_ok=True)
+                for n, k in enumerate(idx, 1):
+                    dst = os.path.join(folder, core.disc_name(n, files[k][0]))
+                    if not os.path.exists(dst):
+                        shutil.copyfile(files[k][1], dst)
+                core.burn_data_disc(folder)
+            else:
+                def on_track(i):
+                    job["i"] = i
+                    self._push()
+                core.burn_disc([files[k][1] for k in idx], on_track)
+            try:  # only songs on a disc that finished burning count as burned
+                core.record_burn([files[k][0] for k in idx],
+                                 {"name": job["name"], "url": job["url"], "count": len(job["tracks"]),
+                                  "discs": len(job["discs"]), "at": time.strftime("%Y-%m-%d")})
+            except Exception:
+                pass
+            job["disc"] += 1
+            if job["disc"] < len(job["discs"]):
+                job["state"] = "ready"  # waits for the next blank disc
+            else:
+                job["state"] = "done"
+                shutil.rmtree(job["tmp"], ignore_errors=True)
+                job["tmp"] = None
+        except Exception as e:
+            job["state"] = "ready"  # the files are still here: the user can retry with another disc
+            job["msg"] = "הצריבה נכשלה: " + core.friendly_error(e)
+        finally:
+            job["i"] = 0
+            self._push()
 
 
 def _focus_running_copy():
@@ -207,10 +303,13 @@ if __name__ == "__main__" and "--selftest" in sys.argv:
               "| ffmpeg bundled:", os.path.exists(core.FFMPEG), flush=True)
         core.latest_release()  # raises if GitHub can't be reached (e.g. certificates)
         print("SELFTEST update check ok", flush=True)
-        tmp = tempfile.mkdtemp(prefix="burner_selftest_")
-        p = core.download_track(t, os.path.join(tmp, "000"))
-        print("SELFTEST download ok:", round(core.wav_seconds(p)), "s wav", flush=True)
-        shutil.rmtree(tmp, ignore_errors=True)
+        if os.environ.get("BURNER_SELFTEST_NO_DOWNLOAD"):  # GitHub's servers are blocked by YouTube anyway
+            print("SELFTEST download skipped", flush=True)
+        else:
+            tmp = tempfile.mkdtemp(prefix="burner_selftest_")
+            p = core.download_track(t, os.path.join(tmp, "000"))
+            print("SELFTEST download ok:", round(core.wav_seconds(p)), "s wav", flush=True)
+            shutil.rmtree(tmp, ignore_errors=True)
     except Exception as e:
         print("SELFTEST failed:", repr(e), flush=True)
     sys.exit(0)

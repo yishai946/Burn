@@ -21,7 +21,7 @@ try:  # Python's own CA list can miss current issuers (GitHub failed); certifi's
     SSL = ssl.create_default_context(cafile=certifi.where())
 except ImportError:
     SSL = ssl.create_default_context()
-VERSION = "1.1.3"             # bump for every release; build.bat tags the GitHub release with it
+VERSION = "1.2.0"             # bump for every release; build.bat tags the GitHub release with it
 REPO = "yishai946/Burn"        # GitHub repo whose releases the in-app updater checks
 FROZEN = getattr(sys, "frozen", False)  # running as the packaged Burner.exe
 RES = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))  # bundled files (index.html, ffmpeg.exe)
@@ -284,7 +284,8 @@ def _ydl(**opts):
     import yt_dlp  # used in-process, so the packaged app needs no separate yt-dlp.exe
     if os.path.exists(FFMPEG):
         opts["ffmpeg_location"] = FFMPEG
-    return yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True, "noprogress": True, "logger": _Quiet(), **opts})
+    return yt_dlp.YoutubeDL({"quiet": True, "no_warnings": True, "noprogress": True, "logger": _Quiet(),
+                             "socket_timeout": 30, "retries": 3, **opts})  # a stalled connection fails instead of hanging
 
 
 def _clean(title):

@@ -24,6 +24,7 @@ concurrency:
 jobs:
   release:
     runs-on: windows-latest
+    timeout-minutes: 40
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
@@ -66,8 +67,10 @@ jobs:
       - name: Build and publish
         if: steps.ver.outputs.go == 'true'
         shell: cmd
+        timeout-minutes: 25
         env:
           PY: python
+          BURNER_SELFTEST_NO_DOWNLOAD: "1"
         run: build.bat ${{ inputs.build_only && 'build' || 'release' }}
 
       - name: Keep the installer from a test build

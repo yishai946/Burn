@@ -229,6 +229,36 @@ footer .status b{color:var(--text)}
 .burner-tour .driver-popover-arrow-side-right{border-right-color:var(--surface)}
 .burner-tour .driver-popover-arrow-side-top{border-top-color:var(--surface)}
 .burner-tour .driver-popover-arrow-side-bottom{border-bottom-color:var(--surface)}
+/* background queue popup, bottom-left */
+.queue{position:fixed;left:20px;bottom:20px;z-index:30;width:min(380px,calc(100vw - 40px));background:var(--surface);border:1px solid var(--line2);border-radius:16px;box-shadow:0 18px 44px rgba(0,0,0,.28);overflow:hidden}
+body.has-foot .queue{bottom:96px}
+.queue.attn{border-color:var(--accent)}
+.qhead{width:100%;display:flex;align-items:center;gap:10px;padding:12px 16px;background:none;border-radius:0;text-align:start}
+.qhead svg{width:18px;height:18px;stroke:var(--accent);fill:none;stroke-width:2;flex:none}
+.qhead .chev{stroke:var(--muted);margin-inline-start:auto;transition:transform .2s}
+.queue:not(.open) .chev{transform:rotate(180deg)}
+.qtitle{font-weight:800}
+.qsum{color:var(--muted);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.qlist{display:flex;flex-direction:column;gap:8px;padding:0 12px 12px;max-height:50vh;overflow-y:auto}
+.queue:not(.open) .qlist{display:none}
+.qjob{display:flex;flex-direction:column;gap:6px;padding:12px;border-radius:12px;background:var(--surface2);border:1px solid var(--line)}
+.qjob.s-ready{border-color:var(--accent)}
+.qjob.s-error .qtext{color:var(--bad)}
+.qtop{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.qtop b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.qtag{flex:none;font-size:12px;color:var(--muted)}
+.s-ready .qtag,.s-burning .qtag{color:var(--accent);font-weight:700}
+.s-done .qtag{color:var(--ok);font-weight:700}
+.qtext{font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.qjob .bar{height:6px}
+.s-burning .bar i{animation:pulse 1.2s infinite}
+.qskip{font-size:12.5px;color:var(--warn)}
+.qskip summary{cursor:pointer}
+.qskip div{color:var(--muted);margin-top:4px}
+.qbtns{display:flex;gap:6px;justify-content:flex-end}
+.qbtns:empty{display:none}
+.qbtns .primary{height:36px;padding:0 18px;font-size:14px}
+.qbtns .ghost{padding:6px 10px;font-size:13px}
 </style>
 </head>
 <body>
@@ -353,6 +383,15 @@ footer .status b{color:var(--text)}
   <div class="status" id="fstatus"></div>
   <button class="primary burn" id="burn" type="button" disabled></button>
 </footer>
+
+<aside class="queue" id="queue" hidden aria-label="תור הורדה וצריבה">
+  <button class="qhead" id="qtoggle" type="button" aria-expanded="true" aria-controls="qlist">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5"/></svg>
+    <span class="qtitle">התור</span><span class="qsum" id="qsum" aria-live="polite"></span>
+    <svg class="chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg>
+  </button>
+  <div class="qlist" id="qlist"></div>
+</aside>
 
 <div id="modal"><div class="dlg" role="dialog" aria-modal="true" aria-labelledby="mt">
   <div class="ok" id="mok" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
@@ -482,6 +521,7 @@ const discWord =n => n === 1 ? 'דיסק אחד' : `${n} דיסקים`;
 function render() {
   const has = S.tracks.length > 0;
   $('start').hidden = has; $('work').hidden = !has; $('foot').hidden = !has;
+  document.body.classList.toggle('has-foot', has);
   if (!has) return;
   const idx = selected(), discs = plan(idx), full = S.cap + (S.fmt === 'mp3' ? 0 : 60), n = discs.length;
   const total = idx.reduce((a, i) => a + secs(i), 0);
@@ -512,8 +552,8 @@ function render() {
       <span class="grip" aria-hidden="true">⋮⋮</span><span class="chk">${CHECK}</span><span class="n mono">${at ? at[1] + 1 : ''}</span>${meta(t)}${tag(t)}${playBtn(i)}${dur(t.ms / 1000)}</div>`;
   }
   $('rows').innerHTML = html;
-  $('burn').innerHTML = DISC + `<span>${n > 1 ? `צרוב ${n} דיסקים` : 'צרוב דיסק'}</span>`;
-  $('burn').disabled = S.busy || !n;
+  $('burn').innerHTML = DISC + `<span>${n > 1 ? `הורד והכן ${n} דיסקים` : 'הורד והכן לצריבה'}</span>`;
+  $('burn').disabled = !n;
 }
 
 // click toggles a song, drag reorders it
@@ -654,7 +694,7 @@ makeSearch($('q1'), $('sug1'));
 makeSearch($('q2'), $('sug2'));
 
 async function poll() {
-  if (S.busy) return;
+  if (S.busy || S.jobs.some(j => j.state === 'burning')) return;
   const s = await pywebview.api.status();
   S.ready = s.state === 'ready';
   const old = S.cap; setCap(s);
@@ -662,6 +702,7 @@ async function poll() {
   $('chip').className = 'chip ' + (S.ready ? 'ready' : s.state === 'no_drive' || s.state === 'unsupported' ? 'bad' : 'warn');
   $('chip').lastElementChild.textContent = s.text;
   if (changed && S.tracks.length) render();
+  renderQueue();  // burn buttons follow the drive state
 }
 
 // ---- burning ----
@@ -679,22 +720,67 @@ const close = () => { $('modal').style.display = 'none'; S.busy = false; render(
 
 $('burn').onclick = async () => {
   stopPlay();
-  const r = await pywebview.api.burn(selected().map(i => S.tracks[i]), S.name, S.url, S.fmt);
-  if (!r.ok) { modal('אי אפשר להתחיל', r.msg, 0, [['אישור', close, true]]); return; }
-  S.busy = true; modal('מתחיל…', '', 0, [['ביטול', () => pywebview.api.abort()]]);
+  const r = await pywebview.api.enqueue(selected().map(i => S.tracks[i]), S.name, S.url, S.fmt);
+  if (!r.ok) { modal('אי אפשר להוסיף לתור', r.msg, 0, [['אישור', close, true]]); return; }
+  // the list now downloads in the background: free the screen for the next one
+  qOpen = true; S.tracks = []; S.order = []; render(); history(); go('choose');
 };
 
-window.App = { progress(p) {
-  const cancel = ['ביטול', () => pywebview.api.abort()];
-  if (p.phase === 'download') modal('מוריד שירים', `${p.i + 1} מתוך ${p.n} · ${p.name}`, p.i / p.n * 100, [cancel]);
-  else if (p.phase === 'insert') modal(`הכנס דיסק ריק (${p.disc} מתוך ${p.of})`, 'הצריבה תמשיך לבד כשיזוהה דיסק ריק.', 0,
-    [['המשך', () => pywebview.api.proceed(), true], cancel]);
-  else if (p.phase === 'burn') modal(`צורב דיסק ${p.disc} מתוך ${p.of}`, S.fmt === 'mp3'
-    ? `כותב ${p.n} שירים, זה לוקח כמה דקות · אל תוציא את הדיסק` : `שיר ${p.i + 1} מתוך ${p.n} · אל תוציא את הדיסק`, p.i / p.n * 100, []);
-  else if (p.phase === 'done') modal('הצריבה הושלמה', (p.discs > 1 ? `${p.discs} דיסקים נצרבו.` : 'הדיסק נצרב.') +
-    (p.skipped.length ? `\n\n${p.skipped.length === 1 ? 'שיר אחד דולג' : p.skipped.length + ' שירים דולגו'} כי לא הצליח לרדת:\n` + p.skipped.join('\n') : ''), 100, [['סגור', close, true]], true);
-  else if (p.phase === 'cancelled') close();
-  else if (p.phase === 'update') modal('מוריד עדכון', `${p.pct}%`, p.pct, []);
+// ---- background queue (bottom-left popup) ----
+S.jobs = [];
+let qOpen = true;
+const STATE = { queued: 'ממתין להורדה', downloading: 'מוריד', ready: 'מוכן לצריבה', burning: 'צורב', done: 'נצרב', error: 'נכשל' };
+function jobLine(j) {
+  const discOf = j.discs > 1 ? ` · דיסק ${j.disc + 1} מתוך ${j.discs}` : '';
+  if (j.state === 'queued') return { text: `${j.n} שירים · ממתין שההורדה הקודמת תסתיים`, pct: 0 };
+  if (j.state === 'downloading') return { text: `שיר ${j.i + 1} מתוך ${j.n} · ${j.current}`, pct: j.i / j.n * 100 };
+  if (j.state === 'ready') return { text: j.msg || (S.ready ? `הכנס דיסק ריק${discOf} ולחץ צרוב` : `מחכה לדיסק ריק${discOf}`), pct: 100 };
+  if (j.state === 'burning') return { text: j.fmt === 'mp3' ? `כותב ${j.disc_songs} שירים${discOf} · אל תוציא את הדיסק`
+    : `שיר ${j.i + 1} מתוך ${j.disc_songs}${discOf} · אל תוציא את הדיסק`, pct: j.fmt === 'mp3' ? 50 : j.i / Math.max(1, j.disc_songs) * 100 };
+  if (j.state === 'done') return { text: j.discs > 1 ? `${j.discs} דיסקים נצרבו` : 'הדיסק נצרב', pct: 100 };
+  return { text: j.msg, pct: 0 };
+}
+function renderQueue() {
+  const q = $('queue'), jobs = S.jobs;
+  q.hidden = !jobs.length;
+  if (!jobs.length) return;
+  const burning = jobs.some(j => j.state === 'burning');
+  const ready = jobs.filter(j => j.state === 'ready').length, active = jobs.filter(j => j.state === 'downloading' || j.state === 'queued').length;
+  $('qsum').textContent = [active && `${active} בהורדה`, ready && `${ready} מוכנים לצריבה`, burning && 'צורב עכשיו'].filter(Boolean).join(' · ') || 'הכול הסתיים';
+  q.classList.toggle('open', qOpen);
+  q.classList.toggle('attn', ready > 0 && !burning);
+  $('qtoggle').setAttribute('aria-expanded', qOpen);
+  $('qlist').innerHTML = jobs.map(j => {
+    const l = jobLine(j);
+    const canBurn = j.state === 'ready' && !burning;
+    const skipped = j.skipped.length ? `<details class="qskip"><summary>${j.skipped.length === 1 ? 'שיר אחד דולג' : j.skipped.length + ' שירים דולגו'}</summary>${j.skipped.map(x => `<div>${esc(x)}</div>`).join('')}</details>` : '';
+    return `<div class="qjob s-${j.state}">
+      <div class="qtop"><b dir="auto">${esc(j.name)}</b><span class="qtag">${j.fmt === 'mp3' ? 'MP3' : 'שמע'} · ${STATE[j.state]}</span></div>
+      <div class="qtext" dir="auto">${esc(l.text)}</div>
+      ${j.state === 'done' || j.state === 'error' ? '' : `<div class="bar"><i style="width:${Math.min(100, l.pct)}%"></i></div>`}
+      ${skipped}
+      <div class="qbtns">
+        ${canBurn ? `<button class="primary" type="button" data-burn="${j.id}" ${S.ready ? '' : 'disabled'}>צרוב${j.discs > 1 ? ` דיסק ${j.disc + 1}` : ''}</button>` : ''}
+        ${j.state === 'burning' ? '' : `<button class="ghost" type="button" data-cancel="${j.id}">${j.state === 'done' || j.state === 'error' ? 'הסר' : 'בטל'}</button>`}
+      </div></div>`;
+  }).join('');
+}
+$('qtoggle').onclick = () => { qOpen = !qOpen; renderQueue(); };
+$('qlist').addEventListener('click', async e => {
+  const b = e.target.closest('button'); if (!b) return;
+  const r = b.dataset.burn ? await pywebview.api.burn_job(+b.dataset.burn) : await pywebview.api.cancel_job(+b.dataset.cancel);
+  if (!r.ok) modal('לא אפשרי כרגע', r.msg, 0, [['אישור', close, true]]);
+});
+
+window.App = {
+jobs(list) {
+  const wasDone = new Set(S.jobs.filter(j => j.state === 'done').map(j => j.id));
+  S.jobs = list;
+  if (list.some(j => j.state === 'done' && !wasDone.has(j.id))) history();  // a burn finished: refresh "recently burned"
+  renderQueue();
+},
+progress(p) {
+  if (p.phase === 'update') modal('מוריד עדכון', `${p.pct}%`, p.pct, []);
   else if (p.phase === 'update_restart') modal('מתקין את העדכון', 'Burner ייסגר ויפתח מחדש בעוד רגע.', 100, []);
   else if (p.phase === 'update_error') modal('העדכון נכשל', p.msg, 0, [['סגור', close, true]]);
   else if (p.phase === 'error') modal('משהו השתבש', p.msg, 0, [['סגור', close, true]]);
@@ -709,7 +795,7 @@ function tour(which) {
     step('.addbar', 'הוספת שירים', 'חפש שיר או אמן ובחר מההצעות כדי להוסיף לרשימה.', 'bottom'),
     step('#discs', 'חלוקה לדיסקים', 'Burner מחלק את השירים לדיסקים של 80 דקות, לפי הסדר, בלי לחתוך שיר באמצע.', 'left'),
     visible('#banner') && step('#banner', 'שים לב', 'כאן תופיע אזהרה כשדיסק כמעט ריק, עם כמה דקות לבטל כדי לחסוך דיסק.', 'bottom'),
-    step('#burn', 'צריבה', 'הכנס דיסק CD-R ריק ולחץ כאן. השירים יורדים ונצרבים. אם יש כמה דיסקים, תתבקש להכניס כל אחד בתורו.', 'top'),
+    step('#burn', 'הורדה וצריבה', 'לחיצה כאן מוסיפה את הרשימה לתור. השירים יורדים ברקע ואפשר להמשיך לעבוד. כשהרשימה מוכנה, היא מופיעה בחלון התור למטה משמאל: מכניסים דיסק ריק ולוחצים צרוב.', 'top'),
     step('#back', 'חזרה', 'חוזר למסך הקודם כדי להתחיל רשימה אחרת.', 'bottom'),
   ] : [
     { popover: { title: 'ברוך הבא ל־Burner', description: 'Burner צורב שירים לדיסק שמע שמתנגן בכל נגן: ברכב, במערכת או בדיסקמן. סיור קצר של כמה צעדים.' } },
@@ -753,7 +839,7 @@ window.addEventListener('unhandledrejection', e => {
   console.error(e.reason);
   modal('משהו השתבש', 'הפעולה לא הצליחה. נסה שוב, ואם זה חוזר, סגור ופתח את Burner מחדש.', 0, [['סגור', close, true]]);
 });
-window.addEventListener('pywebviewready', () => { checkUpdate(); poll(); history(); setInterval(poll, 5000); });
+window.addEventListener('pywebviewready', () => { pywebview.api.jobs().then(App.jobs); checkUpdate(); poll(); history(); setInterval(poll, 5000); });
 </script>
 </body>
 </html>
