@@ -21,7 +21,8 @@ pts += [(12 + 5 * math.cos(a), 12 + 5 * math.sin(a)) for a in (math.pi * i / 300
 pts += cubic((7, 12), (7, 10), (8, 8.5), (9, 7.5))
 pts += cubic((9, 7.5), (9, 9.5), (10, 10.5), (11, 10.5))
 pts += cubic((11, 10.5), (11, 7.5), (10, 5), (12, 2))
-px = [(off + x * u, off + y * u) for x, y in pts]
+DY = 2.5                       # the path spans y 2..17; shift it to sit centred (4.5..19.5) in the 24-unit box
+px = [(off + x * u, off + (y + DY) * u) for x, y in pts]
 
 img = Image.new("RGBA", (S, S), (0, 0, 0, 0))
 d = ImageDraw.Draw(img)

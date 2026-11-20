@@ -14,13 +14,14 @@ import wave
 H = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36"}
 GAP = 2                # seconds of silence the CD format puts before each track
 DEFAULT_CAP = 79 * 60  # usable seconds on an "80 min" disc (1 min safety margin)
+MP3_KBPS = 192         # data-disc MP3s are constant bitrate, so size = seconds * MP3_KBPS * 125
 NOWIN = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 try:  # Python's own CA list can miss current issuers (GitHub failed); certifi's bundle is kept current
     import certifi
     SSL = ssl.create_default_context(cafile=certifi.where())
 except ImportError:
     SSL = ssl.create_default_context()
-VERSION = "1.1.0"             # bump for every release; build.bat tags the GitHub release with it
+VERSION = "1.1.1"             # bump for every release; build.bat tags the GitHub release with it
 REPO = "yishai946/Burn"        # GitHub repo whose releases the in-app updater checks
 FROZEN = getattr(sys, "frozen", False)  # running as the packaged Burner.exe
 RES = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))  # bundled files (index.html, ffmpeg.exe)
@@ -199,11 +200,12 @@ def record_burn(tracks, playlist=None):
 
 
 # ---------- disc planning ----------
-def plan_discs(secs, cap=DEFAULT_CAP):
-    """Split tracks (in order) into discs. Returns lists of indices into `secs`."""
+def plan_discs(secs, cap=DEFAULT_CAP, gap=GAP):
+    """Split tracks (in order) into discs. Returns lists of indices into `secs`.
+    Audio: secs are seconds. Data disc: pass file sizes in bytes, cap in bytes, gap=0."""
     discs, cur, used = [], [], 0
     for i, s in enumerate(secs):
-        need = s + GAP
+        need = s + gap
         if cur and used + need > cap:
             discs.append(cur)
             cur, used = [], 0
@@ -246,17 +248,22 @@ def _find_video(artist, title, ms):
     return best["id"]
 
 
-def download_track(track, dest_base):
-    """Download one track as 44.1kHz 16-bit stereo WAV. Returns the .wav path."""
+def download_track(track, dest_base, fmt="audio"):
+    """Download one track: fmt "audio" -> 44.1kHz 16-bit stereo WAV, "mp3" -> tagged CBR MP3. Returns the path."""
     vid = _find_video(track["artist"], track["title"], track["ms"])
+    if fmt == "mp3":  # ID3v2.3 tags: what car stereos show; many can't read the newer v2.4
+        ext, pp = "mp3", {"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": str(MP3_KBPS)}
+        args = ["-ar", "44100", "-id3v2_version", "3", "-metadata", f"title={track['title']}", "-metadata", f"artist={track['artist']}"]
+    else:
+        ext, pp = "wav", {"key": "FFmpegExtractAudio", "preferredcodec": "wav"}
+        args = ["-ar", "44100", "-ac", "2", "-sample_fmt", "s16"]
     try:
         with _ydl(format="bestaudio/best", noplaylist=True, outtmpl=dest_base + ".%(ext)s",
-                  postprocessors=[{"key": "FFmpegExtractAudio", "preferredcodec": "wav"}],
-                  postprocessor_args={"ffmpeg": ["-ar", "44100", "-ac", "2", "-sample_fmt", "s16"]}) as y:
+                  postprocessors=[pp], postprocessor_args={"ffmpeg": args}) as y:
             y.download([f"https://www.youtube.com/watch?v={vid}"])
     except Exception as e:
         raise RuntimeError(str(e).replace("ERROR: ", "").strip() or "download failed")
-    path = dest_base + ".wav"
+    path = f"{dest_base}.{ext}"
     if not os.path.exists(path):
         raise RuntimeError("download failed")
     return path
@@ -293,24 +300,26 @@ def burner_status():
     try:
         rec = _recorder()
     except Exception as e:
-        return {"state": "no_drive", "text": f"צריבה לא זמינה ({e})", "cap_s": None}
+        return {"state": "no_drive", "text": f"צריבה לא זמינה ({e})", "cap_s": None, "cap_bytes": None}
     if rec is None:
-        return {"state": "no_drive", "text": "לא מחובר צורב", "cap_s": None}
+        return {"state": "no_drive", "text": "לא מחובר צורב", "cap_s": None, "cap_bytes": None}
     name = f"{rec.VendorId.strip()} {rec.ProductId.strip()}".strip()
     try:
         import win32com.client as w
         f = w.Dispatch("IMAPI2.MsftDiscFormat2Data")  # TAO has no media-state property; Data does
         f.Recorder = rec
         if not f.IsRecorderSupported(rec):
-            return {"state": "unsupported", "text": f"{name} לא יכול לצרוב דיסקי שמע", "cap_s": None}
+            return {"state": "unsupported", "text": f"{name} לא יכול לצרוב דיסקי שמע", "cap_s": None, "cap_bytes": None}
         if not f.IsCurrentMediaSupported(rec):
-            return {"state": "no_disc", "text": f"{name} · הכנס דיסק CD-R ריק", "cap_s": None}
+            return {"state": "no_disc", "text": f"{name} · הכנס דיסק CD-R ריק", "cap_s": None, "cap_bytes": None}
         if not f.CurrentMediaStatus & 2:  # IMAPI_FORMAT2_DATA_MEDIA_STATE_BLANK
-            return {"state": "not_blank", "text": f"{name} · הדיסק אינו ריק", "cap_s": None}
-        cap = int(f.TotalSectorsOnMedia) // 75
-        return {"state": "ready", "text": f"{name} · דיסק ריק ({cap // 60} דק׳)", "cap_s": cap}
+            return {"state": "not_blank", "text": f"{name} · הדיסק אינו ריק", "cap_s": None, "cap_bytes": None}
+        sectors = int(f.TotalSectorsOnMedia)
+        cap = sectors // 75
+        return {"state": "ready", "text": f"{name} · דיסק ריק ({cap // 60} דק׳)", "cap_s": cap,
+                "cap_bytes": sectors * 2048 * 96 // 100}  # 4% for the ISO/Joliet file system
     except Exception:
-        return {"state": "no_disc", "text": f"{name} · הכנס דיסק CD-R ריק", "cap_s": None}
+        return {"state": "no_disc", "text": f"{name} · הכנס דיסק CD-R ריק", "cap_s": None, "cap_bytes": None}
 
 
 def burn_disc(wav_paths, on_track=None):
@@ -337,6 +346,37 @@ def burn_disc(wav_paths, on_track=None):
             f.AddAudioTrack(s)
     finally:
         f.ReleaseMedia()  # closes the disc
+    try:
+        rec.EjectMedia()
+    except Exception:
+        pass
+
+
+def disc_name(n, track):
+    """File name on a data disc: the number keeps the playlist order (players sort by name)."""
+    base = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "", f"{n:02d} - {track['artist']} - {track['title']}").strip(" .")
+    return base[:60].rstrip(" .") + ".mp3"  # Joliet allows 64 chars
+
+
+def burn_data_disc(folder, on_start=None):
+    """Burn every file in `folder` as one closed ISO9660+Joliet data disc (what MP3 car stereos read), then eject."""
+    import pythoncom
+    import win32com.client as w
+    pythoncom.CoInitialize()
+    rec = _recorder()
+    f = w.Dispatch("IMAPI2.MsftDiscFormat2Data")
+    f.Recorder = rec
+    f.ClientName = "Burner"
+    f.ForceMediaToBeClosed = True  # one session: older players can't read open multisession discs
+    fs = w.Dispatch("IMAPI2FS.MsftFileSystemImage")
+    fs.ChooseImageDefaults(rec)
+    fs.FileSystemsToCreate = 3  # FsiFileSystemISO9660 | FsiFileSystemJoliet
+    fs.VolumeName = "BURNER"
+    fs.Root.AddTree(folder, False)  # raises if it doesn't fit, before anything is written
+    img = fs.CreateResultImage()
+    if on_start:
+        on_start()
+    f.Write(img.ImageStream)
     try:
         rec.EjectMedia()
     except Exception:
