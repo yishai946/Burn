@@ -25,6 +25,14 @@
   <img src="docs/songs.png" alt="מסך השירים של Burner: רשימת שירים עם תמונות, חלוקה לדיסקים וכפתור צריבה">
 </p>
 
+## Burner בפעולה
+
+<p align="center">
+  <a href="burner_demo.mp4"><img src="docs/demo.gif" width="720" alt="הדגמה מונפשת של Burner: מסך הפתיחה, בניית רשימה וצריבה"></a>
+  <br>
+  <sub>תצוגה מואצת. <a href="burner_demo.mp4">▶ לסרטון המלא (MP4, דקה ו־12 שניות)</a></sub>
+</p>
+
 ## מה יש בו
 
 - **שתי דרכים להתחיל** – הדבקת קישור לפלייליסט ציבורי מ־Spotify או Apple Music, או בניית רשימה מחיפוש שירים עם הצעות בזמן הקלדה.
