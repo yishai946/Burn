@@ -212,7 +212,7 @@ footer .status b{color:var(--text)}
 .dlg .ok{width:64px;height:64px;border-radius:50%;background:var(--ok-bg);display:grid;place-items:center;margin-bottom:8px}
 .dlg .ok svg{width:32px;height:32px;stroke:var(--ok);fill:none;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round}
 .dlg h3{font-size:20px;font-weight:800}
-.dlg p{color:var(--muted);font-size:14px;min-height:20px;overflow-wrap:anywhere}
+.dlg p{color:var(--muted);font-size:14px;min-height:20px;overflow-wrap:anywhere;white-space:pre-line;max-height:40vh;overflow-y:auto}
 .pbar{align-self:stretch;height:8px;border-radius:4px;background:var(--bg);margin:18px 0;overflow:hidden}
 .pbar i{display:block;height:100%;width:0;background:var(--accent);border-radius:4px;transition:width .3s}
 .dlg .row{justify-content:center}
@@ -692,7 +692,7 @@ window.App = { progress(p) {
   else if (p.phase === 'burn') modal(`צורב דיסק ${p.disc} מתוך ${p.of}`, S.fmt === 'mp3'
     ? `כותב ${p.n} שירים, זה לוקח כמה דקות · אל תוציא את הדיסק` : `שיר ${p.i + 1} מתוך ${p.n} · אל תוציא את הדיסק`, p.i / p.n * 100, []);
   else if (p.phase === 'done') modal('הצריבה הושלמה', (p.discs > 1 ? `${p.discs} דיסקים נצרבו.` : 'הדיסק נצרב.') +
-    (p.skipped.length ? ` דולגו ${p.skipped.length}: ` + p.skipped.join('; ') : ''), 100, [['סגור', close, true]], true);
+    (p.skipped.length ? `\n\n${p.skipped.length === 1 ? 'שיר אחד דולג' : p.skipped.length + ' שירים דולגו'} כי לא הצליח לרדת:\n` + p.skipped.join('\n') : ''), 100, [['סגור', close, true]], true);
   else if (p.phase === 'cancelled') close();
   else if (p.phase === 'update') modal('מוריד עדכון', `${p.pct}%`, p.pct, []);
   else if (p.phase === 'update_restart') modal('מתקין את העדכון', 'Burner ייסגר ויפתח מחדש בעוד רגע.', 100, []);
@@ -748,6 +748,11 @@ async function checkUpdate() {
   };
   $('updlater').onclick = () => { $('updbar').hidden = true; };
 }
+// anything the Python side didn't handle still gets a clear message instead of failing silently
+window.addEventListener('unhandledrejection', e => {
+  console.error(e.reason);
+  modal('משהו השתבש', 'הפעולה לא הצליחה. נסה שוב, ואם זה חוזר, סגור ופתח את Burner מחדש.', 0, [['סגור', close, true]]);
+});
 window.addEventListener('pywebviewready', () => { checkUpdate(); poll(); history(); setInterval(poll, 5000); });
 </script>
 </body>

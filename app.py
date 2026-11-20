@@ -27,7 +27,7 @@ class Api:
         try:
             r = core.load_playlist(url)
         except Exception as e:
-            return {"ok": False, "msg": str(e)}
+            return {"ok": False, "msg": core.friendly_error(e)}
         try:
             core.mark_burned(r["tracks"])
         except Exception:
@@ -50,7 +50,7 @@ class Api:
         try:
             tracks = core.search_songs(q)
         except Exception as e:
-            return {"ok": False, "msg": str(e)}
+            return {"ok": False, "msg": core.friendly_error(e)}
         try:
             core.mark_burned(tracks)
         except Exception:
@@ -86,7 +86,7 @@ class Api:
             if got != info["size"]:
                 raise RuntimeError("ההורדה לא הושלמה.")
         except Exception as e:
-            return self._emit(phase="update_error", msg=str(e))
+            return self._emit(phase="update_error", msg=core.friendly_error(e))
         self._emit(phase="update_restart")
         # run the installer once this process has exited (it waits for Burner to close), then it reopens Burner
         subprocess.Popen(f'cmd /c ping -n 3 127.0.0.1 >nul & "{path}" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART',
@@ -111,7 +111,7 @@ class Api:
             return {"ok": False, "msg": st["text"]}
         self._cancel, self._busy = False, True
         self._cont.clear()
-        pl = {"name": name or "Playlist", "url": url, "count": len(tracks), "at": time.strftime("%Y-%m-%d")}
+        pl = {"name": name or "פלייליסט", "url": url, "count": len(tracks), "at": time.strftime("%Y-%m-%d")}
         mp3 = fmt == "mp3"
         cap = st["cap_bytes"] if mp3 else min(core.DEFAULT_CAP, st["cap_s"] - 60)
         threading.Thread(target=self._run, args=(tracks, cap, pl, mp3), daemon=True).start()
@@ -141,9 +141,9 @@ class Api:
                     p = core.download_track(t, os.path.join(tmp, f"{i:03d}"), "mp3" if mp3 else "audio")
                     files.append((t, p, os.path.getsize(p) if mp3 else core.wav_seconds(p)))
                 except Exception as e:
-                    skipped.append(f"{t['title']}: {e}")
+                    skipped.append(f"{t['title']} – {core.friendly_error(e)}")
             if not files:
-                return self._emit(phase="error", msg="אף שיר לא ירד.")
+                return self._emit(phase="error", msg="אף שיר לא ירד, אז לא נצרב כלום." + (" הסיבה: " + skipped[0].split(" – ", 1)[-1] if skipped else ""))
             discs = core.plan_discs([f[2] for f in files], cap, 0 if mp3 else core.GAP)
             for d, idx in enumerate(discs):
                 if d > 0:
@@ -172,7 +172,7 @@ class Api:
                     pass
             self._emit(phase="done", discs=len(discs), skipped=skipped)
         except Exception as e:
-            self._emit(phase="error", msg=str(e))
+            self._emit(phase="error", msg=core.friendly_error(e))
         finally:
             self._busy = False
             shutil.rmtree(tmp, ignore_errors=True)

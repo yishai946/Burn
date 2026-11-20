@@ -21,7 +21,7 @@ try:  # Python's own CA list can miss current issuers (GitHub failed); certifi's
     SSL = ssl.create_default_context(cafile=certifi.where())
 except ImportError:
     SSL = ssl.create_default_context()
-VERSION = "1.1.2"             # bump for every release; build.bat tags the GitHub release with it
+VERSION = "1.1.3"             # bump for every release; build.bat tags the GitHub release with it
 REPO = "yishai946/Burn"        # GitHub repo whose releases the in-app updater checks
 FROZEN = getattr(sys, "frozen", False)  # running as the packaged Burner.exe
 RES = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))  # bundled files (index.html, ffmpeg.exe)
@@ -29,6 +29,56 @@ RES = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))  # bu
 DATA = os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), "Burner") if FROZEN else os.path.dirname(os.path.abspath(__file__))
 os.makedirs(DATA, exist_ok=True)
 FFMPEG = os.path.join(RES, "ffmpeg.exe")  # bundled in the package; from source, yt-dlp finds ffmpeg on PATH
+
+
+# ---------- errors shown to the user ----------
+HEBREW = re.compile(r"[֐-׿]")
+NET = "אין חיבור לאינטרנט, או שהשרת לא עונה. בדוק את החיבור ונסה שוב."
+BURN_HELP = "נסה דיסק CD-R ריק אחר. אם זה חוזר, נתק וחבר את הצורב ונסה שוב."
+# (words in the English error text, Hebrew message) – checked in order, first match wins
+_KNOWN = [
+    (("sign in to confirm", "not a bot"), "יוטיוב חסם זמנית את ההורדות מהמחשב הזה. נסה שוב בעוד כמה דקות."),
+    (("video unavailable", "private video", "has been removed", "not available in your country"), "השיר לא זמין להורדה ביוטיוב."),
+    (("no search results",), "השיר לא נמצא ביוטיוב."),
+    (("requested format is not available",), "לא נמצאה ביוטיוב גרסת שמע של השיר."),
+    (("ffmpeg", "ffprobe"), "רכיב המרת השמע חסר או פגום. התקן את Burner מחדש."),
+    (("http error 429", "too many requests"), "נשלחו יותר מדי בקשות. חכה כמה דקות ונסה שוב."),
+    (("http error 403", "forbidden"), "השרת סירב לבקשה. נסה שוב בעוד כמה דקות."),
+    (("http error 404", "not found"), "הכתובת לא נמצאה. בדוק שהקישור נכון ושהפלייליסט ציבורי."),
+    (("http error 5", "service unavailable", "bad gateway"), "השירות לא זמין כרגע. נסה שוב מאוחר יותר."),
+    (("certificate", "ssl"), "החיבור המאובטח נכשל. בדוק שהשעון של המחשב מכוון, ונסה שוב."),
+    (("getaddrinfo", "name or service", "nodename", "timed out", "timeout", "connection", "network", "urlopen error", "unreachable"), NET),
+    (("no media", "media is not present", "medium not present"), "אין דיסק בצורב. הכנס דיסק CD-R ריק ונסה שוב."),
+    (("not blank", "is not empty", "media is not supported", "incompatible"), "הדיסק בצורב לא ריק או לא מתאים. הכנס דיסק CD-R ריק."),
+    (("upside down",), "נראה שהדיסק הוכנס הפוך. הפוך אותו ונסה שוב."),
+    (("write protect",), "הדיסק מוגן מפני כתיבה. הכנס דיסק CD-R ריק אחר."),
+    (("not enough space", "too large", "insufficient space", "exceeds"), "השירים לא נכנסים בדיסק. בטל כמה שירים ונסה שוב."),
+    (("busy", "in use", "locked", "becoming ready"), "הצורב עסוק כרגע (אולי תוכנה אחרת משתמשת בו). חכה רגע ונסה שוב."),
+]
+
+
+def friendly_error(e):
+    """A clear Hebrew message for any exception; the original goes to the log for debugging."""
+    import traceback
+    print("".join(traceback.format_exception(type(e), e, e.__traceback__)).strip(), file=sys.stderr, flush=True)
+    text = str(e)
+    if HEBREW.search(text):
+        return text  # already written for the user
+    if isinstance(e, OSError) and getattr(e, "errno", None) == 28:
+        return "אין מספיק מקום פנוי בכונן של המחשב. פנה מקום ונסה שוב."
+    if isinstance(e, PermissionError):
+        return "אין הרשאה לגשת לקובץ. סגור תוכנות אחרות שמשתמשות בו ונסה שוב."
+    is_com = type(e).__name__ == "com_error"  # pywintypes.com_error from the Windows burning API
+    if is_com:  # its readable part is the description inside the error details
+        text = " ".join(str(x) for x in e.args if x)
+    low = text.lower()
+    for words, msg in _KNOWN:
+        if any(w in low for w in words):
+            return msg
+    if is_com:
+        code = e.args[0] if e.args else ""
+        return f"הצריבה נכשלה. {BURN_HELP} (קוד: {code & 0xFFFFFFFF:#010x})" if isinstance(code, int) else f"הצריבה נכשלה. {BURN_HELP}"
+    return "אירעה שגיאה לא צפויה. נסה שוב, ואם זה חוזר, שלח את הקובץ burner.log מהתיקייה %APPDATA%\Burner."
 
 
 # ---------- playlist scraping ----------
@@ -82,7 +132,7 @@ def _apple(url):
                        "id": o["contentDescriptor"].get("identifiers", {}).get("storeAdamID")})
     _add_apple_previews(url, tracks)
     t = re.search(r"<title>(.*?)</title>", html, re.S)
-    name = re.split(r" (?:by|-) ", re.sub(r"[‎‏]", "", t.group(1)).strip())[0] if t else "Playlist"
+    name = re.split(r" (?:by|-) ", re.sub(r"[‎‏]", "", t.group(1)).strip())[0] if t else "פלייליסט"
     return name, tracks
 
 
@@ -114,17 +164,22 @@ def _spotify(url):
         if t.get("duration")
     ]
     _add_spotify_art(tracks)
-    return ent.get("name") or ent.get("title") or "Playlist", tracks
+    return ent.get("name") or ent.get("title") or "פלייליסט", tracks
 
 
 def load_playlist(url):
     url = url.strip()
-    if "music.apple.com" in url:
-        name, tracks = _apple(url)
-    elif "spotify.com" in url or url.startswith("spotify:"):
-        name, tracks = _spotify(url)
-    else:
-        raise ValueError("הדבק קישור לפלייליסט של Apple Music או Spotify.")
+    try:
+        if "music.apple.com" in url:
+            name, tracks = _apple(url)
+        elif "spotify.com" in url or url.startswith("spotify:"):
+            name, tracks = _spotify(url)
+        else:
+            raise ValueError("הדבק קישור לפלייליסט של Apple Music או Spotify.")
+    except (KeyError, IndexError, TypeError, json.JSONDecodeError) as e:
+        # the page loaded but holds no playlist: a wrong/deleted link, or a private playlist
+        friendly_error(e)  # log the details
+        raise ValueError("הפלייליסט לא נמצא. בדוק שהקישור נכון ושהפלייליסט ציבורי.") from e
     if not tracks:
         raise ValueError("לא נמצאו שירים בקישור הזה.")
     return {"name": name, "tracks": tracks}
@@ -241,7 +296,7 @@ def _find_video(artist, title, ms):
         info = y.extract_info(f"ytsearch5:{artist.split(',')[0]} {_clean(title)}", download=False)
     cands = [c for c in (info or {}).get("entries") or [] if c and c.get("id")]
     if not cands:
-        raise RuntimeError("no search results")
+        raise RuntimeError("השיר לא נמצא ביוטיוב.")
     want = ms / 1000
     timed = [c for c in cands if c.get("duration")]
     best = min(timed, key=lambda c: abs(c["duration"] - want)) if timed else cands[0]
@@ -262,10 +317,10 @@ def download_track(track, dest_base, fmt="audio"):
                   postprocessors=[pp], postprocessor_args={"ffmpeg": args}) as y:
             y.download([f"https://www.youtube.com/watch?v={vid}"])
     except Exception as e:
-        raise RuntimeError(str(e).replace("ERROR: ", "").strip() or "download failed")
+        raise RuntimeError(friendly_error(e)) from e
     path = f"{dest_base}.{ext}"
     if not os.path.exists(path):
-        raise RuntimeError("download failed")
+        raise RuntimeError("ההורדה לא הסתיימה כמו שצריך. נסה שוב.")
     return path
 
 
@@ -300,7 +355,8 @@ def burner_status():
     try:
         rec = _recorder()
     except Exception as e:
-        return {"state": "no_drive", "text": f"צריבה לא זמינה ({e})", "cap_s": None, "cap_bytes": None}
+        friendly_error(e)  # logged; the short status below is what fits in the header
+        return {"state": "no_drive", "text": "רכיב הצריבה של Windows לא זמין במחשב הזה", "cap_s": None, "cap_bytes": None}
     if rec is None:
         return {"state": "no_drive", "text": "לא מחובר צורב", "cap_s": None, "cap_bytes": None}
     name = f"{rec.VendorId.strip()} {rec.ProductId.strip()}".strip()
