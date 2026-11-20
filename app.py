@@ -63,13 +63,14 @@ class Api:
             pass
         return {"ok": True, "tracks": tracks}
 
-    def check_update(self):
+    def check_update(self, manual=False):
+        """manual (the user pressed the button): also say when there's nothing new or the check failed."""
         if not core.FROZEN:
-            return None  # running from source: nothing to update
+            return {"error": "בדיקת עדכונים עובדת רק ב־Burner המותקן."} if manual else None
         try:
-            return core.latest_release()
-        except Exception:
-            return None  # offline or GitHub unreachable: just skip
+            return core.latest_release() or ({"latest": core.VERSION} if manual else None)
+        except Exception as e:
+            return {"error": core.friendly_error(e)} if manual else None  # on start: offline is fine, just skip
 
     def update(self, info):
         if self.busy():
