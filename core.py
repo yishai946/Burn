@@ -21,7 +21,7 @@ try:  # Python's own CA list can miss current issuers (GitHub failed); certifi's
     SSL = ssl.create_default_context(cafile=certifi.where())
 except ImportError:
     SSL = ssl.create_default_context()
-VERSION = "1.5.1"             # bump for every release; build.bat tags the GitHub release with it
+VERSION = "1.6.0"             # bump for every release; build.bat tags the GitHub release with it
 REPO = "yishai946/Burn"        # GitHub repo whose releases the in-app updater checks
 FROZEN = getattr(sys, "frozen", False)  # running as the packaged Burner.exe
 RES = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))  # bundled files (index.html, ffmpeg.exe)
@@ -189,16 +189,48 @@ def load_playlist(url):
 YT_LINK = re.compile(r"(?:youtube\.com/(?:watch\?(?:.*&)?v=|shorts/|embed/|live/)|youtu\.be/)([\w-]{11})")
 
 
+def _yt_song(vid, title, uploader, duration, artist=None, track=None):
+    """A song from a YouTube video. preview "yt:<id>": the page asks youtube_audio_url() for it when played."""
+    title = title or vid
+    m = re.match(r"(.+?)\s+[-–]\s+(.+)", title)  # most music videos are titled "Artist - Song"
+    if not (artist and track) and m:
+        artist, title = artist or m.group(1), m.group(2)
+    artist = artist or re.sub(r"\s*-\s*Topic$", "", uploader or "YouTube")
+    title = track or title
+    return {"title": title, "artist": artist, "ms": int(duration * 1000), "yt": vid,
+            "art": f"https://i.ytimg.com/vi/{vid}/mqdefault.jpg", "preview": f"yt:{vid}"}
+
+
 def youtube_track(vid):
     """A song straight from a YouTube video, for when the name search can't find the right one."""
     with _ydl(skip_download=True) as y:
         x = y.extract_info(f"https://www.youtube.com/watch?v={vid}", download=False, process=False)
     if not x.get("duration") or x.get("is_live"):
         raise ValueError("זה שידור חי או סרטון בלי אורך ידוע. הדבק קישור לסרטון רגיל.")
-    artist = x.get("artist") or re.sub(r"\s*-\s*Topic$", "", x.get("uploader") or "YouTube")
-    title = x.get("track") or re.sub(rf"^{re.escape(artist)}\s*[-–]\s*", "", x.get("title") or vid, flags=re.I)  # "Artist - Song"
-    return {"title": title, "artist": artist, "ms": int(x["duration"] * 1000), "yt": vid,
-            "art": f"https://i.ytimg.com/vi/{vid}/mqdefault.jpg", "preview": None}
+    return _yt_song(vid, x.get("title"), x.get("uploader"), x["duration"], x.get("artist"), x.get("track"))
+
+
+def youtube_audio_url(vid):
+    """A direct audio stream for previewing a YouTube song (expires after a few hours)."""
+    with _ydl(format="bestaudio[ext=m4a]/bestaudio", skip_download=True) as y:
+        return y.extract_info(f"https://www.youtube.com/watch?v={vid}", download=False)["url"]
+
+
+def _itunes(q, limit):
+    url = "https://itunes.apple.com/search?" + urllib.parse.urlencode(
+        {"term": q, "entity": "song", "limit": limit, "country": "il"})
+    return [{"title": x["trackName"], "artist": x["artistName"], "ms": int(x["trackTimeMillis"]),
+             "id": str(x["trackId"]), "preview": x.get("previewUrl"), "art": x.get("artworkUrl100")}
+            for x in json.loads(_get(url))["results"]
+            if x.get("trackName") and x.get("trackTimeMillis")]
+
+
+def youtube_search(q, n=4):
+    """YouTube videos as song suggestions: songs that are only on YouTube (like a clip) aren't in Apple's catalog."""
+    with _ydl(extract_flat=True, skip_download=True) as y:
+        info = y.extract_info(f"ytsearch{n}:{q}", download=False)
+    return [_yt_song(e["id"], e.get("title"), e.get("channel") or e.get("uploader"), e["duration"])
+            for e in (info or {}).get("entries") or [] if e and e.get("id") and e.get("duration")]
 
 
 def search_songs(q, limit=8):
@@ -210,14 +242,7 @@ def search_songs(q, limit=8):
             return [youtube_track(m.group(1))]
         except Exception as e:  # friendly_error keeps our own Hebrew messages as they are
             raise RuntimeError(friendly_error(e)) from e
-    if len(q) < 2:
-        return []
-    url = "https://itunes.apple.com/search?" + urllib.parse.urlencode(
-        {"term": q, "entity": "song", "limit": limit, "country": "il"})
-    return [{"title": x["trackName"], "artist": x["artistName"], "ms": int(x["trackTimeMillis"]),
-             "id": str(x["trackId"]), "preview": x.get("previewUrl"), "art": x.get("artworkUrl100")}
-            for x in json.loads(_get(url))["results"]
-            if x.get("trackName") and x.get("trackTimeMillis")]
+    return _itunes(q, limit) if len(q) >= 2 else []
 
 
 # ---------- updates (GitHub releases) ----------
@@ -275,6 +300,25 @@ def rename_log(k, old, at, name):
     if not e or e.get("name") != old or e.get("at") != at:
         raise RuntimeError("ההיסטוריה השתנתה בינתיים. פתח אותה שוב ונסה שוב.")
     e["name"] = name
+    _save_history(h)
+
+
+def _burned_keys(e):
+    """Song keys a history entry burned, from its "artist – title" lines."""
+    return {f"{s.split(' – ', 1)[0]}|{s.split(' – ', 1)[-1]}".casefold().strip()
+            for d in e.get("discs", []) if d.get("state") == "burned" for s in d.get("songs", [])}
+
+
+def delete_log(k, name, at):
+    """Remove one history entry; its songs stop counting as burned unless another entry burned them too."""
+    h = load_history()
+    e = h["log"][k] if 0 <= k < len(h["log"]) else None
+    if not e or e.get("name") != name or e.get("at") != at:
+        raise RuntimeError("ההיסטוריה השתנתה בינתיים. פתח אותה שוב ונסה שוב.")
+    del h["log"][k]
+    keep = set().union(*map(_burned_keys, h["log"]))
+    for key in _burned_keys(e) - keep:
+        h["songs"].pop(key, None)
     _save_history(h)
 
 

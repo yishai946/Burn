@@ -53,6 +53,28 @@ class Api:
         except Exception:
             return None
 
+    def yt_audio(self, vid):
+        """Preview of a YouTube song: a direct audio URL, or None."""
+        if not core.re.fullmatch(r"[\w-]{11}", vid or ""):
+            return None
+        try:
+            return core.youtube_audio_url(vid)
+        except Exception as e:
+            core.friendly_error(e)  # logged
+            return None
+
+    def search_yt(self, q):
+        """YouTube suggestions, asked for after Apple's so those show at once. Empty on any failure."""
+        if core.YT_LINK.search(q or "") or len((q or "").strip()) < 2:
+            return []
+        try:
+            tracks = core.youtube_search(q.strip())
+            core.mark_burned(tracks)
+            return tracks
+        except Exception as e:
+            core.friendly_error(e)  # logged; Apple's suggestions are enough
+            return []
+
     def search(self, q):
         try:
             tracks = core.search_songs(q)
@@ -119,20 +141,28 @@ class Api:
             return {"ok": False, "msg": core.friendly_error(e)}
         return {"ok": True}
 
+    def delete_history(self, k, name, at):
+        """name/at: the row the page showed (see rename_history). Its songs stop counting as burned."""
+        try:
+            core.delete_log(k, name, at)
+        except Exception as e:
+            return {"ok": False, "msg": core.friendly_error(e)}
+        return {"ok": True}
+
     def status(self):
         return core.burner_status()
 
     # --- the queue: lists download in the background, then wait for the user to burn them ---
     # job states: queued -> downloading -> ready -> burning -> ready (next disc) ... -> done | error
-    def enqueue(self, tracks, name=None, url=None, fmt="audio", only=False):
-        """only: download to a folder in Downloads, no burning."""
+    def enqueue(self, tracks, name=None, url=None, fmt="audio", only=False, save=True):
+        """only: download to a folder in Downloads, no burning. save=False: leave no trace in the history (burning for a friend)."""
         if not tracks:
             return {"ok": False, "msg": "לא נבחרו שירים."}
         with self._lock:
             self._next_id += 1
             job = {"id": self._next_id, "name": name or "פלייליסט", "url": url, "fmt": "mp3" if fmt == "mp3" else "audio",
                    "tracks": tracks, "state": "queued", "i": 0, "n": len(tracks), "current": "", "skipped": [],
-                   "discs": [], "disc": 0, "msg": "", "files": [], "tmp": None, "cancel": False, "only": bool(only), "logged": False, "pct": 0}
+                   "discs": [], "disc": 0, "msg": "", "files": [], "tmp": None, "cancel": False, "only": bool(only), "logged": False, "pct": 0, "save": bool(save)}
             self._jobs.append(job)
         self._push()
         self._wake.set()
@@ -319,7 +349,7 @@ class Api:
                 for j in self._jobs]
 
     QUEUE = os.path.join(core.DATA, "queue.json")
-    SAVED = ("id", "name", "url", "fmt", "tracks", "state", "skipped", "discs", "disc", "msg", "files", "tmp", "only", "logged")
+    SAVED = ("id", "name", "url", "fmt", "tracks", "state", "skipped", "discs", "disc", "msg", "files", "tmp", "only", "logged", "save")
 
     def _save(self):
         with self._lock:
@@ -344,6 +374,7 @@ class Api:
                 j["files"] = [f for f in j["files"] if os.path.exists(f[1])]  # downloaded songs that are still on disk
                 j.setdefault("only", False)  # queues saved before download-only existed
                 j.setdefault("logged", False)
+                j.setdefault("save", True)
                 j.update(i=0, n=len(j["tracks"]), current="", cancel=False, pct=0, was_burning=j["state"] == "burning")
                 if j["state"] in ("downloading", "queued") or (j["state"] in ("ready", "burning") and self._pending(j)):
                     j["state"], j["discs"] = "queued", []
@@ -460,7 +491,7 @@ class Api:
 
     def _log(self, job, status):
         """Write the list to the activity history once, with what happened to each disc."""
-        if job.get("logged"):
+        if job.get("logged") or not job.get("save", True):
             return
         job["logged"] = True
         song = lambda t: f"{t['artist']} – {t['title']}"
@@ -514,10 +545,11 @@ class Api:
                     job["i"] = i
                     self._push()
                 core.burn_disc([files[k][1] for k in idx], on_track)
-            try:  # only songs on a disc that finished burning count as burned
-                core.record_burn([files[k][0] for k in idx])
-            except Exception:
-                pass
+            if job["save"]:
+                try:  # only songs on a disc that finished burning count as burned
+                    core.record_burn([files[k][0] for k in idx])
+                except Exception:
+                    pass
             job["disc"] += 1
             if job["disc"] < len(job["discs"]):
                 job["state"] = "ready"  # waits for the next blank disc

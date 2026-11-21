@@ -280,6 +280,8 @@ body.has-foot .queue{bottom:96px}
 .hst{flex:none;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:700;border:1px solid currentColor}
 .hst.ok{color:var(--ok)} .hst.warn{color:var(--warn)} .hst.bad{color:var(--bad)} .hst.muted{color:var(--muted)}
 .hbtns{display:flex;gap:8px;margin-top:4px}
+.savehist{display:flex;align-items:center;gap:6px;font-size:14px;color:var(--muted);cursor:pointer;white-space:nowrap}
+.savehist input{width:16px;height:16px;accent-color:var(--accent)}
 .ename{cursor:text;border-radius:4px;outline:1px dashed transparent;outline-offset:2px}
 .ename:hover,.ename:focus{outline-color:var(--muted)}
 .hbtns button{height:34px;padding:0 14px;font-size:14px}
@@ -420,6 +422,7 @@ body.has-foot .queue{bottom:96px}
 
 <footer id="foot" hidden>
   <div class="status" id="fstatus"></div>
+  <label class="savehist" title="כבוי: הצריבה לא תירשם בהיסטוריה, והשירים לא יסומנו כ&quot;כבר נצרב&quot; (למשל כשצורבים לחבר)"><input type="checkbox" id="savehist" checked>שמור בהיסטוריה</label>
   <button class="ghost" id="dlonly" type="button" disabled>הורד בלבד, בלי לצרוב</button>
   <button class="primary burn" id="burn" type="button" disabled></button>
 </footer>
@@ -553,7 +556,33 @@ $('dgrid').onclick = e => {
 // 30s preview player (one track at a time)
 const player = new Audio(); let playing = null, waiting = null;
 const noPreview = new Set();
-player.onended = () => { playing = null; render(); };
+let sugUrl = null;  // preview playing from the search suggestions, before the song is added
+player.onended = () => { playing = sugUrl = null; sugIcons(); render(); };
+const PLAY_SVG = '<svg viewBox="0 0 12 12"><path d="M3.5 2l6 4-6 4z"/></svg>', PAUSE_SVG = '<svg viewBox="0 0 12 12"><path d="M3 2h2v8H3zM7 2h2v8H7z"/></svg>';
+function sugIcons() { document.querySelectorAll('.sug .play').forEach(b => { const on = b.dataset.url === sugUrl; b.classList.toggle('on', on); b.classList.remove('wait'); b.innerHTML = on ? PAUSE_SVG : PLAY_SVG; }); }
+// "yt:<id>" previews (YouTube songs) need a stream address from Python first; it takes a few seconds
+const ytSrc = new Map();
+async function srcFor(url) {
+  if (!url.startsWith('yt:')) return url;
+  if (!ytSrc.has(url)) { const u = await pywebview.api.yt_audio(url.slice(3)); if (!u) throw new Error('no preview'); ytSrc.set(url, u); }
+  return ytSrc.get(url);
+}
+async function sugPlay(btn) {
+  const url = btn.dataset.url, again = sugUrl === url;
+  stopPlay(); render();
+  if (!again) {
+    sugUrl = url;
+    btn.classList.add('wait');
+    try { player.src = await srcFor(url); if (sugUrl !== url) return; await player.play(); }
+    catch (e) {  // same fallback as the list's play button
+      const data = await pywebview.api.preview(url);
+      if (sugUrl !== url) return;
+      if (data) { player.src = data; await player.play().catch(() => { sugUrl = null; }); }
+      else { sugUrl = null; btn.disabled = true; btn.title = 'תצוגה מקדימה לא זמינה'; }
+    }
+  }
+  sugIcons();
+}
 const playBtn = i => {
   if (!S.tracks[i].preview) return '';
   if (noPreview.has(i)) return `<button class="play na" type="button" disabled aria-label="תצוגה מקדימה לא זמינה" title="תצוגה מקדימה לא זמינה"><svg viewBox="0 0 12 12"><path d="M3.5 2l6 4-6 4z"/></svg></button>`;
@@ -566,7 +595,7 @@ async function togglePlay(i) {
   playing = waiting = i; render();
   const url = S.tracks[i].preview;
   try {
-    player.src = url; await player.play();
+    player.src = await srcFor(url); if (playing !== i) return; await player.play();
   } catch (e) {                            // the webview could not stream it directly: fetch it through Python
     try {
       const data = await pywebview.api.preview(url);
@@ -578,7 +607,7 @@ async function togglePlay(i) {
   if (waiting === i) waiting = null;
   render();
 }
-function stopPlay() { player.pause(); playing = waiting = null; }
+function stopPlay() { player.pause(); playing = waiting = sugUrl = null; sugIcons(); }
 const onPlay = e => { const b = e.target.closest('.play'); if (!b) return false; e.stopPropagation(); togglePlay(+b.dataset.p); return true; };
 const meta = t => (t.art ? `<img class="art" src="${esc(t.art)}" alt="" loading="lazy">` : '<span class="art" aria-hidden="true"></span>') + `<div class="meta"><b dir="auto">${esc(t.title)}</b><span dir="auto">${esc(t.artist)}</span></div>`;
 const dur = s => `<span class="dur mono" dir="ltr">${fmt(s)}</span>`;
@@ -666,7 +695,7 @@ function render() {
   $('rows').innerHTML = html;
   $('burn').innerHTML = DISC + `<span>${n > 1 ? `הורד והכן ${n} דיסקים` : 'הורד והכן לצריבה'}</span>`;
   $('burn').disabled = $('dlonly').disabled = !n;
-  $('dlonly').hidden = !!S.job;
+  $('dlonly').hidden = $('savehist').parentElement.hidden = !!S.job;
   const j = S.job && S.jobs.find(x => x.id === S.job);
   if (j) {  // a list from the queue: this button burns it once every song is down
     const done = j.songs.filter(x => x[0] !== 'wait' && x[0] !== 'dl').length;
@@ -773,11 +802,19 @@ function histRow(p, k) {
   return `<div class="hrow"><div class="htop"><b dir="auto">${esc(p.name)}</b><span class="hst ${cls}">${label}</span></div>
     <span class="hmeta">${meta}</span>${p.msg ? `<span class="hmeta" dir="auto">${esc(p.msg)}</span>` : ''}
     ${body ? `<details class="qdiscs"><summary>אילו שירים</summary>${body}</details>` : ''}
-    <div class="hbtns">${p.url ? `<button class="ghost" type="button" data-k="${k}">טען שוב</button>` : ''}<button class="ghost" type="button" data-rename="${k}">שנה שם</button></div></div>`;
+    <div class="hbtns">${p.url ? `<button class="ghost" type="button" data-k="${k}">טען שוב</button>` : ''}<button class="ghost" type="button" data-rename="${k}">שנה שם</button><button class="ghost" type="button" data-del="${k}">מחק</button></div></div>`;
 }
 $('pprev').onclick = () => { page--; paintRecent(); };
 $('pnext').onclick = () => { page++; paintRecent(); };
 $('rgrid').addEventListener('click', e => {
+  const del = e.target.closest('button[data-del]');
+  if (del) {  // e.g. the disc broke: its songs no longer count as burned
+    const k = +del.dataset.del, p = recent[k];
+    modal('למחוק מההיסטוריה?', `"${p.name}" יימחק מההיסטוריה, והשירים שנצרבו בו כבר לא יסומנו "כבר נצרב" (אלא אם נצרבו גם ברשימה אחרת).`, 0, [
+      ['מחק', async () => { close(); const r = await pywebview.api.delete_history(k, p.name, p.at); if (!r.ok) modal('לא אפשרי כרגע', r.msg, 0, [['אישור', close, true]]); else history(); }, true],
+      ['ביטול', close]]);
+    return;
+  }
   const b = e.target.closest('button[data-rename]'); if (!b) return;
   const k = +b.dataset.rename, p = recent[k], el = b.closest('.hrow').querySelector('.htop b');
   el.contentEditable = 'plaintext-only'; el.focus(); getSelection().selectAllChildren(el);
@@ -827,7 +864,7 @@ function addTrack(t) {
 
 function makeSearch(input, list) {
   let timer, seq = 0, items = [], active = -1;
-  const close = () => { list.hidden = true; input.setAttribute('aria-expanded', 'false'); input.removeAttribute('aria-activedescendant'); active = -1; };
+  const close = () => { list.hidden = true; input.setAttribute('aria-expanded', 'false'); input.removeAttribute('aria-activedescendant'); active = -1; if (sugUrl) stopPlay(); };
   const show = html => { list.innerHTML = html; list.hidden = false; input.setAttribute('aria-expanded', 'true'); };
   input.addEventListener('input', () => {
     clearTimeout(timer);
@@ -838,15 +875,24 @@ function makeSearch(input, list) {
       show('<li class="msg">מחפש…</li>');
       const r = await pywebview.api.search(q);
       if (my !== seq) return;              // a newer search already started
-      if (!r.ok) { show(`<li class="msg">${esc(r.msg)}</li>`); return; }
-      items = r.tracks; active = -1;
+      items = r.ok ? r.tracks : []; active = -1;
       const inList = new Set(S.order.map(i => keyOf(S.tracks[i])));
-      show(items.length ? items.map((t, k) => `<li role="option" id="${list.id}-${k}" data-k="${k}" aria-selected="false">${meta(t)}${tag(t)}${inList.has(keyOf(t)) ? '<span class="in">ברשימה</span>' : ''}${dur(t.ms / 1000)}</li>`).join('')
-        : '<li class="msg">לא נמצאו שירים</li>');
+      const paint = more => show(items.length ? items.map((t, k) => `<li role="option" id="${list.id}-${k}" data-k="${k}" aria-selected="${k === active}">${meta(t)}${tag(t)}${t.yt ? '<span class="tag">יוטיוב</span>' : ''}${inList.has(keyOf(t)) ? '<span class="in">ברשימה</span>' : ''}${t.preview ? `<button class="play" type="button" tabindex="-1" data-url="${esc(t.preview)}" aria-label="השמע 30 שניות" title="השמע 30 שניות (Ctrl+רווח)">${PLAY_SVG}</button>` : ''}${dur(t.ms / 1000)}</li>`).join('')
+          + (more ? '<li class="msg">מחפש גם ביוטיוב…</li>' : '')
+        : `<li class="msg">${more ? 'מחפש…' : r.ok ? 'לא נמצאו שירים' : esc(r.msg)}</li>`);
+      const link = /youtu\.?be/i.test(q);  // a pasted link is already the one song
+      paint(!link); sugIcons();
+      if (link) return;
+      const yt = await pywebview.api.search_yt(q);  // slower than Apple's search, so it comes second
+      if (my !== seq) return;
+      items = items.concat(yt); paint(false); sugIcons();
     }, 300);
   });
   const pick = k => { input.value = ''; close(); addTrack(items[k]); };
-  list.addEventListener('mousedown', e => { const li = e.target.closest('li[data-k]'); if (li) { e.preventDefault(); pick(+li.dataset.k); } });
+  list.addEventListener('mousedown', e => {  // the play button previews; anywhere else on the row adds the song
+    const pb = e.target.closest('.play'); if (pb) { e.preventDefault(); if (!pb.disabled) sugPlay(pb); }
+  });
+  list.addEventListener('mousedown', e => { if (e.target.closest('.play')) return; const li = e.target.closest('li[data-k]'); if (li) { e.preventDefault(); pick(+li.dataset.k); } });
   input.addEventListener('keydown', e => {
     const lis = list.hidden ? [] : list.querySelectorAll('li[data-k]');
     if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && lis.length) {
@@ -854,6 +900,8 @@ function makeSearch(input, list) {
       active = (active + (e.key === 'ArrowDown' ? 1 : -1) + lis.length) % lis.length;
       lis.forEach((li, n) => li.setAttribute('aria-selected', n === active));
       input.setAttribute('aria-activedescendant', lis[active].id); lis[active].scrollIntoView({ block: 'nearest' });
+    } else if (e.key === ' ' && e.ctrlKey && active >= 0) {  // keyboard preview of the highlighted song
+      e.preventDefault(); const pb = lis[active].querySelector('.play'); if (pb && !pb.disabled) sugPlay(pb);
     } else if (e.key === 'Enter' && active >= 0) { e.preventDefault(); pick(active); }
     else if (e.key === 'Escape') close();
   });
@@ -889,7 +937,8 @@ const close = () => { $('modal').style.display = 'none'; S.busy = false; render(
 
 const enqueue = async only => {
   stopPlay();
-  const r = await pywebview.api.enqueue(selected().map(i => S.tracks[i]), S.name, S.url, S.fmt, only);
+  const r = await pywebview.api.enqueue(selected().map(i => S.tracks[i]), S.name, S.url, S.fmt, only, $('savehist').checked);
+  $('savehist').checked = true;  // off is a one-time choice, for this list only
   if (!r.ok) { modal('אי אפשר להוסיף לתור', r.msg, 0, [['אישור', close, true]]); return; }
   putDrafts(drafts().filter(x => x.id !== S.draft));  // sent to the queue: no longer unfinished
   // the list now downloads in the background: free the screen for the next one
