@@ -103,27 +103,64 @@ class Api:
             return None
 
     def search_yt(self, q):
-        """YouTube suggestions, asked for after Apple's so those show at once. Empty on any failure."""
-        if core.YT_LINK.search(q or "") or len((q or "").strip()) < 2:
-            return []
+        """YouTube videos and playlists, asked for after Apple's results so those show at once. Empty on any failure."""
+        q = (q or "").strip()
+        if core.YT_LINK.search(q) or core.is_list_link(q) or len(q) < 2:
+            return {"tracks": [], "lists": []}
+        from concurrent.futures import ThreadPoolExecutor
+
+        def safe(fn):
+            try:
+                return fn(q)
+            except Exception as e:
+                core.friendly_error(e)  # logged; Apple's suggestions are enough
+                return []
+        with ThreadPoolExecutor(2) as ex:
+            tracks, lists = ex.map(safe, (core.youtube_search, core.youtube_lists))
         try:
-            tracks = core.youtube_search(q.strip())
             core.mark_burned(tracks)
-            return tracks
-        except Exception as e:
-            core.friendly_error(e)  # logged; Apple's suggestions are enough
-            return []
+        except Exception:
+            pass
+        return {"tracks": tracks, "lists": lists}
 
     def search(self, q):
+        """Songs and albums from Apple; a pasted link gives its song (YouTube) or its whole playlist."""
+        q = (q or "").strip()
         try:
-            tracks = core.search_songs(q)
+            if core.is_list_link(q):
+                r = core.load_playlist(q)
+                tracks, lists = [], [{"kind": "list", "src": "url", "url": q, "name": r["name"], "artist": "", "count": len(r["tracks"]),
+                                      "art": next((t.get("art") for t in r["tracks"] if t.get("art")), None), "tracks": r["tracks"]}]
+            else:
+                from concurrent.futures import ThreadPoolExecutor
+                with ThreadPoolExecutor(2) as ex:
+                    songs = ex.submit(core.search_songs, q)
+                    albums = ex.submit(core.album_search, q) if len(q) >= 2 and not core.YT_LINK.search(q) else None
+                tracks = songs.result()
+                try:
+                    lists = albums.result() if albums else []
+                except Exception as e:
+                    core.friendly_error(e)  # logged; the songs still show
+                    lists = []
         except Exception as e:
             return {"ok": False, "msg": core.friendly_error(e)}
         try:
             core.mark_burned(tracks)
         except Exception:
             pass
-        return {"ok": True, "tracks": tracks}
+        return {"ok": True, "tracks": tracks, "lists": lists}
+
+    def load_list(self, item):
+        """Songs of a list picked in the search box (album, YouTube playlist or pasted link)."""
+        try:
+            r = core.load_list(item or {})
+        except Exception as e:
+            return {"ok": False, "msg": core.friendly_error(e)}
+        try:
+            core.mark_burned(r["tracks"])
+        except Exception:
+            pass
+        return {"ok": True, **r}
 
     def check_update(self, manual=False):
         """manual (the user pressed the button): also say when there's nothing new or the check failed."""

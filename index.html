@@ -59,7 +59,22 @@ main>*{direction:rtl}
 .logo{width:38px;height:38px;border-radius:11px;background:var(--accent);display:grid;place-items:center}
 .logo svg{width:21px;height:21px;stroke:var(--on-accent);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .brand b{font-size:21px;font-weight:800}
-.brand span{color:var(--muted);font-size:14px}
+.lead{display:flex;align-items:center;gap:22px;flex-wrap:wrap}
+.nav{display:flex;gap:4px}
+.nav button{height:38px;padding:0 14px;border-radius:999px;background:none;color:var(--muted);font-weight:700;font-size:14px;display:flex;align-items:center;gap:6px}
+.nav button:hover{color:var(--text);background:var(--surface)}
+.nav button[aria-current="page"]{background:var(--accent);color:var(--on-accent)}
+.nav .cnt{min-width:20px;height:20px;padding:0 6px;border-radius:999px;background:var(--surface2);color:var(--text);font-size:12px;display:grid;place-items:center}
+.nav .cnt:empty{display:none}
+.icon{width:38px;height:38px;border-radius:50%;background:var(--surface);border:1px solid var(--line);display:grid;place-items:center;color:var(--text)}
+.icon:hover{border-color:var(--line2)}
+.icon svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.icon.upd{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+[data-tip]{position:relative}
+[data-tip]:hover::after,[data-tip]:focus-visible::after{content:attr(data-tip);position:absolute;top:calc(100% + 8px);left:50%;transform:translateX(-50%);z-index:60;
+  background:var(--text);color:var(--bg);font-size:12px;font-weight:600;line-height:1.3;padding:6px 10px;border-radius:8px;white-space:nowrap;pointer-events:none}
+.tools [data-tip]::after{left:0;transform:none}  /* the toolbar sits at the window's left edge: open tooltips inward */
+.toast{position:fixed;bottom:96px;left:50%;transform:translateX(-50%);z-index:70;background:var(--text);color:var(--bg);padding:10px 16px;border-radius:10px;font-weight:600;font-size:14px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
 .tools{display:flex;align-items:center;gap:10px;min-width:0}
 .theme{height:38px;padding:0 12px;border-radius:999px;background:var(--surface);border:1px solid var(--line);display:flex;align-items:center;gap:8px;font-size:13px}
 .theme svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round}
@@ -69,6 +84,7 @@ main>*{direction:rtl}
 .chip span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
 main{flex:1;overflow-y:auto}
+main.fixed{overflow:hidden}  /* the home screen fits the window, no scrolling */
 
 /* start */
 .hero{max-width:720px;margin:0 auto;padding:40px 0 40px;display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center}
@@ -147,6 +163,8 @@ input[type=url]:focus{border-color:var(--accent)}
 .choice .ic svg{width:22px;height:22px;stroke:var(--on-accent);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .search{position:relative;width:100%}
 .search>svg{position:absolute;inset-inline-start:16px;top:50%;width:18px;height:18px;margin-top:-9px;stroke:var(--muted);fill:none;stroke-width:2;stroke-linecap:round;pointer-events:none}
+.search.home{max-width:620px;margin-top:10px}
+.search.home input{height:58px;font-size:16px}
 .search input{width:100%;height:54px;padding-inline:46px 16px;border-radius:12px;border:1px solid var(--line2);background:var(--surface);color:var(--text);font:inherit;font-size:15px;outline:none}
 .search input:focus{border-color:var(--accent)}
 .search input::-webkit-search-cancel-button{display:none}
@@ -155,6 +173,8 @@ input[type=url]:focus{border-color:var(--accent)}
 .sug li[aria-selected="true"],.sug li[data-k]:hover{background:var(--surface2)}
 .sug li.msg{color:var(--muted);cursor:default}
 .sug .in{flex:none;font-size:12px;color:var(--muted)}
+.sug li.grp{font-size:12px;font-weight:700;color:var(--muted);padding:10px 10px 4px;cursor:default}
+.sug .art.list{border-radius:6px;box-shadow:3px -3px 0 var(--line2)}
 .addbar{padding:14px 22px 0}
 .addbar .search input{height:46px}
 .panel{overflow:visible}
@@ -163,6 +183,7 @@ input[type=url]:focus{border-color:var(--accent)}
 .tag{flex:none;max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:700;color:var(--warn);border:1px solid currentColor}
 .startwrap{min-height:100%;display:flex;flex-direction:column;justify-content:center;padding:0 28px}
 .startwrap .hero{padding:24px 0}
+.empty{color:var(--muted);text-align:center;padding:18px 0}
 .recent{width:100%;max-width:560px;margin-top:12px;display:flex;flex-direction:column;gap:12px;text-align:start;
   background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px}
 .recent h2{font-size:15px;font-weight:700}
@@ -295,16 +316,22 @@ body.has-foot .queue{bottom:96px}
 </head>
 <body>
 <header class="top">
-  <div class="brand">
-    <div class="logo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.5c1 3.5 5 5.5 5 10a5 5 0 0 1-10 0c0-2 1-3.5 2-4.5 0 2 1 3 2 3 0-3-1-5.5 1-8.5z"/></svg></div>
-    <b>Burner</b><span>פלייליסט ← דיסקים</span>
+  <div class="lead">
+    <div class="brand">
+      <div class="logo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4.5c1 3.5 5 5.5 5 10a5 5 0 0 1-10 0c0-2 1-3.5 2-4.5 0 2 1 3 2 3 0-3-1-5.5 1-8.5z"/></svg></div>
+      <b>Burner</b>
+    </div>
+    <nav class="nav" id="nav" aria-label="עמודים">
+      <button type="button" data-nav="home" aria-current="page">בית</button>
+      <button type="button" data-nav="drafts">רשימות שלא סיימת<span class="cnt" id="dcount"></span></button>
+      <button type="button" data-nav="history">היסטוריה</button>
+    </nav>
   </div>
   <div class="tools">
-    <button class="theme" id="hist" type="button" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></svg><span>היסטוריה</span></button>
-    <button class="theme" id="help" type="button" aria-label="סיור באפליקציה"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6"/><path d="M12 17.2v.1"/></svg><span>עזרה</span></button>
-    <button class="theme" id="chkupd" type="button" aria-label="בדוק עדכונים"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg><span>בדוק עדכונים</span></button>
-    <button class="theme" id="theme" type="button"></button>
     <div class="chip" id="chip"><i></i><span>בודק צורב…</span></div>
+    <button class="icon" id="chkupd" type="button" aria-label="בדוק עדכונים" data-tip="בדוק עדכונים"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg></button>
+    <button class="icon" id="help" type="button" aria-label="סיור באפליקציה" data-tip="סיור באפליקציה"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6"/><path d="M12 17.2v.1"/></svg></button>
+    <button class="icon" id="theme" type="button"></button>
   </div>
 </header>
 <div class="updbar" id="updbar" role="status" hidden>
@@ -316,23 +343,14 @@ body.has-foot .queue{bottom:96px}
 <main>
   <section class="startwrap" id="start">
   <div class="hero">
-    <div class="page" id="p-choose">
-      <svg width="84" height="84" viewBox="0 0 88 88" fill="none" aria-hidden="true"><circle cx="44" cy="44" r="42" stroke="var(--line2)" stroke-width="2"/><circle cx="44" cy="44" r="30" stroke="var(--line)" stroke-width="2"/><circle cx="44" cy="44" r="10" stroke="var(--accent)" stroke-width="2.5"/><path d="M44 2a42 42 0 0 1 42 42" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round"/></svg>
+    <div class="page" id="p-home">
+      <svg width="72" height="72" viewBox="0 0 88 88" fill="none" aria-hidden="true"><circle cx="44" cy="44" r="42" stroke="var(--line2)" stroke-width="2"/><circle cx="44" cy="44" r="30" stroke="var(--line)" stroke-width="2"/><circle cx="44" cy="44" r="10" stroke="var(--accent)" stroke-width="2.5"/><path d="M44 2a42 42 0 0 1 42 42" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round"/></svg>
       <h1>מפלייליסט לדיסק, בלחיצה אחת</h1>
-      <p>Burner מוריד את השירים, מחלק אותם לדיסקים וצורב לפי הסדר. איך תרצה להתחיל?</p>
-      <div class="choices">
-        <button class="choice" type="button" data-go="link">
-          <span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg></span>
-          <b>מקישור לפלייליסט</b><span>הדבק קישור מ־Spotify או Apple Music</span>
-        </button>
-        <button class="choice" type="button" data-go="search">
-          <span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg></span>
-          <b>מחיפוש שירים</b><span>בנה רשימה משלך, שיר אחרי שיר</span>
-        </button>
-      </div>
-      <div class="recent" id="drafts" hidden>
-        <h2>רשימות שלא סיימת</h2>
-        <div class="grid" id="dgrid"></div>
+      <p>חפש שירים, אלבומים ופלייליסטים, או הדבק קישור מ־Spotify, Apple Music או יוטיוב. Burner מוריד, מחלק לדיסקים וצורב לפי הסדר.</p>
+      <div class="search home">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+        <input id="q1" type="search" role="combobox" aria-expanded="false" aria-controls="sug1" aria-autocomplete="list" autocomplete="off" aria-label="חיפוש שירים ופלייליסטים" placeholder="שיר, אמן, אלבום או קישור לפלייליסט…">
+        <ul class="sug" id="sug1" role="listbox" aria-label="תוצאות חיפוש" hidden></ul>
       </div>
       <div class="fmt">
         <span id="fmt-l">סוג דיסק</span>
@@ -344,37 +362,13 @@ body.has-foot .queue{bottom:96px}
       </div>
     </div>
 
-    <div class="page" id="p-link" hidden>
-      <button class="ghost back" type="button" data-go="choose">→ חזרה</button>
-      <h1>מקישור לפלייליסט</h1>
-      <p>הדבק קישור לפלייליסט ציבורי. אחרי הטעינה תוכל לבחור שירים, לסדר אותם ולצרוב.</p>
-      <div class="form">
-        <label for="url">קישור לפלייליסט</label>
-        <div class="row">
-          <input id="url" type="url" dir="ltr" placeholder="https://open.spotify.com/playlist/…">
-          <button class="primary" id="load" type="button">טען פלייליסט</button>
-        </div>
-        <div class="err" id="err" role="alert"></div>
-        <div class="hint">נתמכים: Spotify ו־Apple Music, פלייליסטים ציבוריים בלבד. נקראים עד כ־50 השירים הראשונים.</div>
-      </div>
-    </div>
-
-    <div class="page" id="p-search" hidden>
-      <button class="ghost back" type="button" data-go="choose">→ חזרה</button>
-      <h1>מחיפוש שירים</h1>
-      <p>הקלד שם של שיר או אמן ובחר מההצעות. השיר הראשון פותח רשימה חדשה, ובמסך הבא אפשר להמשיך להוסיף.</p>
-      <div class="form">
-        <label for="q1">חיפוש שיר</label>
-        <div class="search">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
-          <input id="q1" type="search" role="combobox" aria-expanded="false" aria-controls="sug1" aria-autocomplete="list" autocomplete="off" placeholder="שם שיר או אמן, או קישור מיוטיוב…">
-          <ul class="sug" id="sug1" role="listbox" aria-label="הצעות שירים" hidden></ul>
-        </div>
-      </div>
+    <div class="page" id="p-drafts" hidden>
+      <h1>רשימות שלא סיימת</h1>
+      <p>רשימה ששינית ולא שלחת לצריבה נשמרת כאן. "המשך" פותח אותה בדיוק איפה שעזבת.</p>
+      <div class="recent" id="drafts"><div class="grid" id="dgrid"></div></div>
     </div>
 
     <div class="page" id="p-history" hidden>
-      <button class="ghost back" type="button" data-go="choose">→ חזרה</button>
       <h1>היסטוריה</h1>
       <p>כל רשימה ששלחת לתור: מה נצרב, מה הורד, מה בוטל ומה נכשל.</p>
       <div class="recent" id="recent">
@@ -412,7 +406,7 @@ body.has-foot .queue{bottom:96px}
       <div class="addbar">
         <div class="search">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
-          <input id="q2" type="search" role="combobox" aria-expanded="false" aria-controls="sug2" aria-autocomplete="list" autocomplete="off" aria-label="הוסף שיר לרשימה" placeholder="הוסף שיר: שם, אמן או קישור מיוטיוב…">
+          <input id="q2" type="search" role="combobox" aria-expanded="false" aria-controls="sug2" aria-autocomplete="list" autocomplete="off" aria-label="הוסף לרשימה" placeholder="הוסף: שיר, אמן, אלבום או קישור לפלייליסט…">
           <ul class="sug" id="sug2" role="listbox" aria-label="הצעות שירים" hidden></ul>
         </div>
       </div>
@@ -428,6 +422,8 @@ body.has-foot .queue{bottom:96px}
   <button class="ghost" id="dlonly" type="button" disabled>הורד בלבד, בלי לצרוב</button>
   <button class="primary burn" id="burn" type="button" disabled></button>
 </footer>
+
+<div class="toast" id="toast" role="status" hidden></div>
 
 <aside class="queue" id="queue" hidden aria-label="תור הורדה וצריבה">
   <button class="qhead" id="qtoggle" type="button" aria-expanded="true" aria-controls="qlist">
@@ -483,13 +479,13 @@ const CHECK = '<svg viewBox="0 0 12 12"><path d="M2 6.5l2.5 2.5L10 3.5"/></svg>'
 const DISC = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5"/></svg>';
 
 // ---- theme: system → light → dark ----
-const THEMES = [['', 'מערכת', '<circle cx="12" cy="12" r="8"/><path d="M12 4v16"/>'],
+const THEMES = [['', 'מערכת', '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>'],
   ['light', 'בהיר', '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>'],
   ['dark', 'כהה', '<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>']];
 function paintTheme() {
   const cur = document.documentElement.dataset.theme || '', t = THEMES.find(x => x[0] === cur) || THEMES[0];
-  $('theme').innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${t[2]}</svg><span>${t[1]}</span>`;
-  $('theme').setAttribute('aria-label', 'ערכת צבעים: ' + t[1]);
+  $('theme').innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${t[2]}</svg>`;
+  $('theme').setAttribute('aria-label', 'ערכת צבעים: ' + t[1]); $('theme').dataset.tip = 'ערכת צבעים: ' + t[1];
 }
 $('theme').onclick = () => {
   const cur = document.documentElement.dataset.theme || '', next = THEMES[(THEMES.findIndex(x => x[0] === cur) + 1) % 3][0];
@@ -542,8 +538,8 @@ function saveDraft() {
     at: new Date().toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'short' }) }, ...drafts().filter(d => d.id !== S.draft)]);
 }
 function paintDrafts() {
-  const d = drafts(); $('drafts').hidden = !d.length;
-  $('dgrid').innerHTML = d.map(x => `<div class="hrow"><div class="htop"><b dir="auto">${esc(x.name)}</b></div>
+  const d = drafts(); $('dcount').textContent = d.length || '';
+  $('dgrid').innerHTML = !d.length ? '<div class="empty">אין רשימות פתוחות. רשימה ששינית ולא שלחת לצריבה תופיע כאן.</div>' : d.map(x => `<div class="hrow"><div class="htop"><b dir="auto">${esc(x.name)}</b></div>
     <span class="hmeta">${x.order.length} שירים · ${x.sel.length} נבחרו · <span dir="ltr">${esc(x.at)}</span></span>
     <div class="hbtns"><button class="primary" type="button" data-open="${x.id}">המשך</button><button class="ghost" type="button" data-drop="${x.id}">מחק</button></div></div>`).join('');
 }
@@ -551,7 +547,7 @@ $('dgrid').onclick = e => {
   const b = e.target.closest('button'); if (!b) return;
   if (b.dataset.drop) { if (confirm('למחוק את הרשימה הזו?')) putDrafts(drafts().filter(x => x.id !== +b.dataset.drop)); return; }
   const d = drafts().find(x => x.id === +b.dataset.open); if (!d) return;
-  Object.assign(S, { tracks: d.tracks, order: d.order, sel: new Set(d.sel), name: d.name, url: d.url, from: d.from });
+  Object.assign(S, { tracks: d.tracks, order: d.order, sel: new Set(d.sel), name: d.name, url: d.url, from: 'drafts' });
   $('pname').textContent = S.name; noPreview.clear(); setCover();
   S.draft = d.id; S.dirty = true; render();
 };
@@ -628,7 +624,7 @@ function openJob(j) {
   stopPlay();
   if (!S.job) S.fmtPrev = S.fmt;
   Object.assign(S, { job: j.id, tracks: j.tracks.map(t => ({ ...t })), order: [...j.tracks.keys()], sel: new Set(j.tracks.keys()),
-    name: j.name, url: j.url, from: 'choose', fmt: j.fmt === 'mp3' ? 'mp3' : 'audio', draft: null, dirty: false });
+    name: j.name, url: j.url, from: 'home', fmt: j.fmt === 'mp3' ? 'mp3' : 'audio', draft: null, dirty: false });
   jobStatus(j);
   $('pname').textContent = S.name; noPreview.clear(); setCap(); setCover(); render();
 }
@@ -657,6 +653,7 @@ function render() {
   const has = S.tracks.length > 0;
   $('start').hidden = has; $('work').hidden = !has; $('foot').hidden = !has;
   document.body.classList.toggle('has-foot', has);
+  navState();
   if (!has) { S.draft = null; S.dirty = false; leaveJob(); return; }
   saveDraft();
   if (S.job && S.dirty) { S.dirty = false; clearTimeout(syncT); syncT = setTimeout(syncJob, 400); }
@@ -749,25 +746,26 @@ $('rows').ondrop = e => {
 };
 $('rows').ondragend = () => { dragI = null; render(); };
 
-$('new').onclick = () => { stopPlay(); S.tracks = []; S.order = []; render(); history(); go('choose'); };
-// back to the page the list came from; a list built by search exists only here, so confirm first
-$('back').onclick = () => {
-  stopPlay(); S.tracks = []; S.order = []; render(); history(); go(S.from || 'choose');
-};
-$('hist').onclick = () => {
-  if (S.tracks.length) {
-    stopPlay(); S.tracks = []; S.order = []; render();
-  }
-  go('history');
-};
-
-// start screen: a choice page, then the link page or the search page
+// pages: home, saved lists and history; an open list covers them (it is part of home)
+const PAGES = ['home', 'drafts', 'history'];
+S.page = 'home';
+function closeList() { stopPlay(); S.tracks = []; S.order = []; render(); }  // a changed list is already saved in drafts
 function go(page) {
-  for (const p of ['choose', 'link', 'search', 'history']) $('p-' + p).hidden = p !== page;
-  if (page === 'link') $('url').focus();
-  if (page === 'search') $('q1').focus();
+  S.page = PAGES.includes(page) ? page : 'home';
+  for (const p of PAGES) $('p-' + p).hidden = p !== S.page;
+  if (S.page === 'history') history();
+  if (S.page === 'drafts') paintDrafts();
+  navState();
+  if (S.page === 'home' && !S.tracks.length) $('q1').focus();
 }
-$('start').addEventListener('click', e => { const b = e.target.closest('[data-go]'); if (b) go(b.dataset.go); });
+function navState() {
+  const page = S.tracks.length ? 'home' : S.page;
+  document.querySelectorAll('[data-nav]').forEach(b => b.dataset.nav === page ? b.setAttribute('aria-current', 'page') : b.removeAttribute('aria-current'));
+  document.querySelector('main').classList.toggle('fixed', page === 'home' && !S.tracks.length);
+}
+$('nav').onclick = e => { const b = e.target.closest('[data-nav]'); if (!b) return; if (S.tracks.length) closeList(); go(b.dataset.nav); };
+$('new').onclick = () => { closeList(); go('home'); };
+$('back').onclick = () => { closeList(); go(S.from); };  // back to the page the list came from
 
 // inline rename: Enter or leaving the field saves, Escape restores; an empty name keeps the old one
 function editName(el, save) {
@@ -783,11 +781,11 @@ async function history() { recent = await pywebview.api.history(); page = 0; pai
 function paintRecent() {
   const pages = Math.ceil(recent.length / PAGE);
   page = Math.min(page, Math.max(0, pages - 1));
-  $('hist').hidden = !recent.length;
   $('pager').hidden = pages < 2;
   $('pinfo').textContent = `עמוד ${page + 1} מתוך ${pages}`;
   $('pprev').disabled = page === 0; $('pnext').disabled = page >= pages - 1;
-  $('rgrid').innerHTML = recent.slice(page * PAGE, page * PAGE + PAGE).map((p, j) => histRow(p, page * PAGE + j)).join('');
+  $('rgrid').innerHTML = recent.slice(page * PAGE, page * PAGE + PAGE).map((p, j) => histRow(p, page * PAGE + j)).join('')
+    || '<div class="empty">עוד לא שלחת רשימות לצריבה.</div>';
 }
 const HST = { burned: ['נצרב', 'ok'], partial: ['נצרב חלקית', 'warn'], downloaded: ['הורד', 'ok'], cancelled: ['בוטל', 'muted'], failed: ['נכשל', 'bad'] };
 const DST = { burned: 'נצרב', cancelled: 'בוטל', failed: 'לא נצרב' };
@@ -826,22 +824,33 @@ $('rgrid').addEventListener('click', e => {
   });
   el.addEventListener('blur', () => el.contentEditable = 'false', { once: true });
 });
-$('rgrid').onclick = e => { const b = e.target.closest('button[data-k]'); if (!b || !recent[b.dataset.k].url) return; $('url').value = recent[b.dataset.k].url; go('link'); load(); };
+$('rgrid').onclick = e => { const b = e.target.closest('button[data-k]'); if (b && recent[b.dataset.k].url) openUrl(recent[b.dataset.k].url); };
 
-async function load() {
-  const url = $('url').value.trim(); if (!url) return;
-  S.url = url; S.from = 'link';
-  $('err').textContent = ''; $('load').disabled = true; $('load').textContent = 'טוען…';
-  const r = await pywebview.api.load(url);
-  $('load').disabled = false; $('load').textContent = 'טען פלייליסט';
-  if (!r.ok) { $('err').textContent = r.msg; return; }
-  S.tracks = r.tracks; S.sel = new Set(r.tracks.keys()); S.order = [...r.tracks.keys()];
-  $('pname').textContent = S.name = r.name;
-  noPreview.clear(); setCover();
-  render();
+let toastT;
+function toast(text) { $('toast').textContent = text; $('toast').hidden = false; clearTimeout(toastT); toastT = setTimeout(() => $('toast').hidden = true, 3500); }
+// a list's songs: with no list open they become a new one, otherwise they join it (songs already in it are skipped)
+function takeList(r) {
+  if (!S.tracks.length) {
+    Object.assign(S, { tracks: r.tracks, order: [...r.tracks.keys()], sel: new Set(r.tracks.keys()), name: r.name, url: r.url || null,
+      from: 'home', draft: null, dirty: false });
+    $('pname').textContent = S.name; noPreview.clear(); setCover(); render();
+    return;
+  }
+  let added = 0;
+  for (const t of r.tracks) {
+    let i = S.tracks.findIndex(x => keyOf(x) === keyOf(t));
+    if (i < 0) i = S.tracks.push(t) - 1;
+    if (!S.order.includes(i)) { S.order.push(i); S.sel.add(i); added++; }
+  }
+  S.dirty = true; setCover(); render();
+  const skipped = r.tracks.length - added;
+  toast(added ? `${added === 1 ? 'נוסף שיר אחד' : `נוספו ${added} שירים`} מ־"${r.name}"${skipped ? ` · ${skipped === 1 ? 'שיר אחד כבר היה' : skipped + ' כבר היו'} ברשימה` : ''}` : `כל השירים מ־"${r.name}" כבר ברשימה`);
 }
-$('load').onclick = load;
-$('url').onkeydown = e => { if (e.key === 'Enter') load(); };
+async function openUrl(url) {
+  const r = await pywebview.api.load(url);
+  if (!r.ok) return modal('לא הצלחתי לטעון את הרשימה', r.msg, 0, [['אישור', close, true]]);
+  takeList({ ...r, url });
+}
 
 function setCover() {
   const art = S.tracks.find(t => t.art)?.art, cover = document.querySelector('.pl .cover');
@@ -852,7 +861,7 @@ function setCover() {
 const keyOf = t => `${t.artist}|${t.title}`.toLowerCase();
 function addTrack(t) {
   if (!S.tracks.length) {                  // first pick on the start screen opens a new list
-    S.url = null; S.from = 'search'; S.name = 'רשימה מ־' + new Date().toLocaleDateString('he-IL');
+    S.url = null; S.from = 'home'; S.name = 'רשימה מ־' + new Date().toLocaleDateString('he-IL');
     S.sel = new Set(); S.order = []; noPreview.clear();
     $('pname').textContent = S.name;
   }
@@ -867,7 +876,11 @@ function addTrack(t) {
 function makeSearch(input, list) {
   let timer, seq = 0, items = [], active = -1;
   const close = () => { list.hidden = true; input.setAttribute('aria-expanded', 'false'); input.removeAttribute('aria-activedescendant'); active = -1; if (sugUrl) stopPlay(); };
-  const show = html => { list.innerHTML = html; list.hidden = false; input.setAttribute('aria-expanded', 'true'); };
+  const show = html => {
+    list.innerHTML = html; list.hidden = false; input.setAttribute('aria-expanded', 'true');
+    // stay inside the window: the home screen doesn't scroll, so a taller list would be cut off
+    list.style.maxHeight = Math.max(160, Math.min(420, innerHeight - list.getBoundingClientRect().top - 16)) + 'px';
+  };
   input.addEventListener('input', () => {
     clearTimeout(timer);
     const q = input.value.trim();
@@ -877,20 +890,35 @@ function makeSearch(input, list) {
       show('<li class="msg">מחפש…</li>');
       const r = await pywebview.api.search(q);
       if (my !== seq) return;              // a newer search already started
-      items = r.ok ? r.tracks : []; active = -1;
+      items = r.ok ? [...r.tracks, ...r.lists] : []; active = -1;
       const inList = new Set(S.order.map(i => keyOf(S.tracks[i])));
-      const paint = more => show(items.length ? items.map((t, k) => `<li role="option" id="${list.id}-${k}" data-k="${k}" aria-selected="${k === active}">${meta(t)}${tag(t)}${t.yt ? '<span class="tag">יוטיוב</span>' : ''}${inList.has(keyOf(t)) ? '<span class="in">ברשימה</span>' : ''}${t.preview ? `<button class="play" type="button" tabindex="-1" data-url="${esc(t.preview)}" aria-label="השמע 30 שניות" title="השמע 30 שניות (Ctrl+רווח)">${PLAY_SVG}</button>` : ''}${dur(t.ms / 1000)}</li>`).join('')
-          + (more ? '<li class="msg">מחפש גם ביוטיוב…</li>' : '')
-        : `<li class="msg">${more ? 'מחפש…' : r.ok ? 'לא נמצאו שירים' : esc(r.msg)}</li>`);
-      const link = /youtu\.?be/i.test(q);  // a pasted link is already the one song
+      const opt = (t, k) => t.kind === 'list'
+        ? `<li role="option" id="${list.id}-${k}" data-k="${k}" aria-selected="${k === active}">${t.art ? `<img class="art list" src="${esc(t.art)}" alt="" loading="lazy">` : '<span class="art list" aria-hidden="true"></span>'}<div class="meta"><b dir="auto">${esc(t.name)}</b><span dir="auto">${t.src === 'album' ? 'אלבום' : t.src === 'yt' ? 'פלייליסט ביוטיוב' : 'פלייליסט'}${t.artist ? ' · ' + esc(t.artist) : ''}</span></div>${t.count ? `<span class="in">${t.count} שירים</span>` : ''}<span class="in">${S.tracks.length ? 'הוסף הכול' : 'פתח'}</span></li>`
+        : `<li role="option" id="${list.id}-${k}" data-k="${k}" aria-selected="${k === active}">${meta(t)}${tag(t)}${t.yt ? '<span class="tag">יוטיוב</span>' : ''}${inList.has(keyOf(t)) ? '<span class="in">ברשימה</span>' : ''}${t.preview ? `<button class="play" type="button" tabindex="-1" data-url="${esc(t.preview)}" aria-label="השמע 30 שניות" title="השמע 30 שניות (Ctrl+רווח)">${PLAY_SVG}</button>` : ''}${dur(t.ms / 1000)}</li>`;
+      const paint = more => {
+        const songs = items.map((t, k) => [t, k]).filter(([t]) => t.kind !== 'list'), lists = items.map((t, k) => [t, k]).filter(([t]) => t.kind === 'list');
+        show(items.length ? (songs.length ? '<li class="grp" role="presentation">שירים</li>' + songs.map(([t, k]) => opt(t, k)).join('') : '')
+            + (lists.length ? '<li class="grp" role="presentation">אלבומים ופלייליסטים</li>' + lists.map(([t, k]) => opt(t, k)).join('') : '')
+            + (more ? '<li class="msg">מחפש גם ביוטיוב…</li>' : '')
+          : `<li class="msg">${more ? 'מחפש…' : r.ok ? 'לא נמצאו תוצאות' : esc(r.msg)}</li>`);
+      };
+      const link = /youtu\.?be|spotify|music\.apple/i.test(q);  // a pasted link is already its one song or list
       paint(!link); sugIcons();
       if (link) return;
       const yt = await pywebview.api.search_yt(q);  // slower than Apple's search, so it comes second
       if (my !== seq) return;
-      items = items.concat(yt); paint(false); sugIcons();
+      items = items.concat(yt.tracks, yt.lists); paint(false); sugIcons();
     }, 300);
   });
-  const pick = k => { input.value = ''; close(); addTrack(items[k]); };
+  const pick = async k => {
+    const t = items[k]; input.value = ''; close();
+    if (t.kind !== 'list') return addTrack(t);
+    const ph = input.placeholder; input.disabled = true; input.placeholder = `טוען את "${t.name}"…`;
+    const r = await pywebview.api.load_list(t);
+    input.disabled = false; input.placeholder = ph;
+    if (!r.ok) return modal('לא הצלחתי לטעון את הרשימה', r.msg, 0, [['אישור', close, true]]);
+    takeList(r);
+  };
   list.addEventListener('mousedown', e => {  // the play button previews; anywhere else on the row adds the song
     const pb = e.target.closest('.play'); if (pb) { e.preventDefault(); if (!pb.disabled) sugPlay(pb); }
   });
@@ -1004,9 +1032,12 @@ $('share').onclick = async () => {
 
 // ---- what's new: once after each update, with a short tour of it ----
 const NEWS = [  // [version, [[title, text, element]]], newest first
+  ['1.8.0', [['חיפוש אחד לכול', 'במסך הבית יש תיבה אחת: שירים, אלבומים, פלייליסטים מיוטיוב, או קישור מ־Spotify, Apple Music ויוטיוב.', '.search.home'],
+             ['חיבור כמה פלייליסטים', 'בחרת אלבום או פלייליסט כשרשימה פתוחה? השירים שלו מתווספים אליה, חוץ ממה שכבר יש בה.', '.addbar'],
+             ['עמודים בסרגל העליון', 'בית, רשימות שלא סיימת והיסטוריה הם עכשיו עמודים בסרגל העליון. ערכת הצבעים, העזרה והעדכונים הפכו לאייקונים.', '#nav']]],
   ['1.7.0', [['שיתוף הרשימה', 'הכפתור "שתף" במסך השירים יוצר תמונה מעוצבת של הרשימה, להעתקה לווטסאפ או לשמירה בהורדות.', '#share']]],
   ['1.6.0', [['שמור בהיסטוריה', 'צורבים לחבר? כבה את "שמור בהיסטוריה" למטה במסך השירים, והשירים לא יסומנו "כבר נצרב".', '.savehist'],
-             ['מחיקה מההיסטוריה', 'דיסק נהרס? מחק אותו מההיסטוריה, והשירים שלו כבר לא יסומנו "כבר נצרב".', '#hist'],
+             ['מחיקה מההיסטוריה', 'דיסק נהרס? מחק אותו מההיסטוריה, והשירים שלו כבר לא יסומנו "כבר נצרב".', '[data-nav="history"]'],
              ['האזנה לפני הוספה', 'בהצעות החיפוש יש ▶ להאזנה לשיר לפני שמוסיפים אותו.', '.addbar'],
              ['שירים מיוטיוב', 'שירים שיש רק ביוטיוב מופיעים בחיפוש עם התגית "יוטיוב". אפשר גם להדביק קישור מיוטיוב.', '.addbar']]],
   ['1.5.0', [['רשימה מהתור', 'לחיצה על רשימה בתור פותחת אותה: רואים כל שיר יורד, ואפשר להוסיף, למחוק, לנסות שוב ולשנות סדר לפני הצריבה.', '#queue']]],
@@ -1024,7 +1055,7 @@ async function whatsNew() {
     [['הראה לי', () => { close(); newsTour(items); }, true], ['סגור', close]]);
 }
 // each feature is shown on its own screen; with no list open, a sample list stands in for the songs screen
-const NEWS_SCREEN = { '#share': 'work', '.savehist': 'work', '.addbar': 'work', '#hist': 'start' };
+const NEWS_SCREEN = { '#share': 'work', '.savehist': 'work', '.addbar': 'work', '[data-nav="history"]': 'start', '.search.home': 'start', '#nav': 'start' };
 const DEMO = [['שיר לדוגמה', 'אמן', 214], ['Another Song', 'Artist', 187], ['עוד שיר', 'זמרת', 245]].map(([title, artist, s]) => ({ title, artist, ms: s * 1000 }));
 let demoSaved = null;
 function demoList(on) {
@@ -1039,7 +1070,7 @@ function demoList(on) {
   }
 }
 function newsTour(items) {
-  const go = i => { const scr = NEWS_SCREEN[items[i]?.[2]]; if (scr) demoList(scr === 'work'); };
+  const go = i => { const scr = NEWS_SCREEN[items[i]?.[2]]; if (scr) demoList(scr === 'work'); if (scr === 'start' && items[i][2] === '.search.home') window.go('home'); };
   const d = window.driver.js.driver({
     // a selector that isn't on screen (e.g. no history yet) gets its popover in the middle instead
     steps: items.map(([t, desc, sel]) => step(sel || undefined, t, desc, 'bottom')),
@@ -1072,7 +1103,7 @@ const enqueue = async only => {
   if (!r.ok) { modal('אי אפשר להוסיף לתור', r.msg, 0, [['אישור', close, true]]); return; }
   putDrafts(drafts().filter(x => x.id !== S.draft));  // sent to the queue: no longer unfinished
   // the list now downloads in the background: free the screen for the next one
-  qOpen = true; S.tracks = []; S.order = []; render(); history(); go('choose');
+  qOpen = true; S.tracks = []; S.order = []; render(); history(); go('home');
 };
 $('burn').onclick = () => S.job ? burnJob(S.job) : enqueue(false);
 $('dlonly').onclick = () => enqueue(true);
@@ -1153,7 +1184,7 @@ jobs(list) {
   if (S.job) {
     const j = list.find(x => x.id === S.job);
     if (!j || j.disc || !['queued', 'downloading', 'ready', 'error'].includes(j.state)) {  // burned, burning or removed
-      leaveJob(); S.tracks = []; S.order = []; render(); go('choose');
+      leaveJob(); S.tracks = []; S.order = []; render(); go('home');
     } else { jobStatus(j); render(); }
   }
   if (ended) history();  // a list finished, failed or was cancelled: refresh the history
@@ -1174,7 +1205,7 @@ function tour(which) {
   const steps = which === 'work' ? [
     step('#rows .tr', 'הרשימה שלך', 'לחיצה על שיר מסמנת או מבטלת אותו. שיר שביטלת יורד לסוף הרשימה, ולידו מופיע פח למחיקה. הכפתור ▶ משמיע קטע של 30 שניות.', 'bottom'),
     step('#rows .grip', 'שינוי סדר', 'תופסים את הידית ⋮⋮ וגוררים את השיר למקום אחר ברשימה.', 'left'),
-    step('.addbar', 'הוספת שירים', 'חפש שיר או אמן ובחר מההצעות כדי להוסיף לרשימה.', 'bottom'),
+    step('.addbar', 'הוספת שירים', 'חפש שיר, אלבום או פלייליסט, או הדבק קישור. אלבום או פלייליסט מוסיפים את כל השירים שלהם, חוץ ממה שכבר ברשימה.', 'bottom'),
     step('#discs', 'חלוקה לדיסקים', 'Burner מחלק את השירים לדיסקים של 80 דקות, לפי הסדר, בלי לחתוך שיר באמצע.', 'left'),
     visible('#banner') && step('#banner', 'שים לב', 'כאן תופיע אזהרה כשדיסק כמעט ריק, עם כמה דקות לבטל כדי לחסוך דיסק.', 'bottom'),
     step('#burn', 'הורדה וצריבה', 'לחיצה כאן מוסיפה את הרשימה לתור. השירים יורדים ברקע ואפשר להמשיך לעבוד. כשהרשימה מוכנה, היא מופיעה בחלון התור למטה משמאל: מכניסים דיסק ריק ולוחצים צרוב. אם יש כמה דיסקים, שם רואים אילו שירים בכל דיסק.', 'top'),
@@ -1184,10 +1215,9 @@ function tour(which) {
     step('#back', 'חזרה', 'חוזר למסך הקודם. אם שינית משהו ברשימה, היא נשמרת ותוכל להמשיך אותה מהמסך הראשי.', 'bottom'),
   ] : [
     { popover: { title: 'ברוך הבא ל־Burner', description: 'Burner צורב שירים לדיסק שמע שמתנגן בכל נגן: ברכב, במערכת או בדיסקמן. סיור קצר של כמה צעדים.' } },
-    step('.choices', 'בחר איך להתחיל', 'הדבק קישור לפלייליסט מ־Spotify או Apple Music, או חפש שירים ובנה רשימה משלך.', 'top'),
-    visible('#drafts') && step('#drafts', 'רשימות שלא סיימת', 'רשימה ששינית ולא שלחת לצריבה נשמרת כאן. "המשך" פותח אותה בדיוק איפה שעזבת.', 'top'),
+    step('.search.home', 'מתחילים כאן', 'חפש שיר, אמן, אלבום או פלייליסט, או הדבק קישור מ־Spotify, Apple Music או יוטיוב. שיר פותח רשימה חדשה, ואלבום או פלייליסט פותחים רשימה עם כל השירים שלהם.', 'bottom'),
+    step('#nav', 'עמודים', 'בית, רשימות שלא סיימת (רשימה ששינית ולא שלחת לצריבה נשמרת שם), והיסטוריה של כל מה ששלחת לתור.', 'bottom'),
     step('.fmt', 'סוג דיסק', 'דיסק שמע מתנגן בכל נגן, עד 80 דקות. דיסק MP3 מחזיק כ־8 שעות, אבל רק לנגן שתומך ב־MP3. סימן השאלה מסביר את ההבדל.', 'top'),
-    visible('#hist') && step('#hist', 'היסטוריה', 'כל רשימה ששלחת לתור, עם מה שקרה לה: נצרב, נצרב חלקית, הורד, בוטל או נכשל. אפשר לראות אילו שירים היו בכל דיסק ולטעון רשימה שוב.', 'bottom'),
     step('#chip', 'מצב הצורב', 'נקודה ירוקה: יש דיסק ריק ואפשר לצרוב. כתומה או אדומה: צריך להכניס דיסק או לחבר צורב.', 'bottom'),
     step('#theme', 'בהיר או כהה', 'מחליף בין ערכת המערכת, בהיר וכהה.', 'bottom'),
     step('#chkupd', 'עדכונים', 'Burner בודק לבד אם יש גרסה חדשה בכל פתיחה. אפשר גם לבדוק מכאן בכל רגע.', 'bottom'),
@@ -1202,7 +1232,7 @@ function tour(which) {
 }
 const seen = key => { try { return !!localStorage.getItem(key); } catch (e) { return true; } };
 $('chkupd').onclick = () => checkUpdate(true);
-$('help').onclick = () => tour($('work').hidden ? 'start' : 'work');
+$('help').onclick = () => { if ($('work').hidden) go('home'); tour($('work').hidden ? 'start' : 'work'); };
 let workTourPending = !seen('tourWork2');
 const _render = render;
 render = function () {                     // first time the songs screen appears, run its tour
@@ -1217,6 +1247,9 @@ async function checkUpdate(manual) {
   if (u.error) { modal('לא הצלחנו לבדוק עדכונים', u.error, 0, [['סגור', close, true]]); return; }
   if (u.latest) { modal('אין עדכונים', `יש לך את הגרסה האחרונה (${u.latest}).`, 0, [['סגור', close, true]], true); return; }
   $('updver').textContent = u.version; $('updbar').hidden = false;
+  const ic = $('chkupd'); ic.classList.add('upd'); ic.dataset.tip = ic.ariaLabel = `גרסה ${u.version} זמינה · לחץ לעדכון`;
+  ic.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>';
+  ic.onclick = () => $('upd').click();
   $('upd').onclick = async () => {
     const r = await pywebview.api.update(u);
     if (!r.ok) { modal('אי אפשר לעדכן עכשיו', r.msg, 0, [['סגור', close, true]]); return; }

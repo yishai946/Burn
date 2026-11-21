@@ -21,7 +21,7 @@ try:  # Python's own CA list can miss current issuers (GitHub failed); certifi's
     SSL = ssl.create_default_context(cafile=certifi.where())
 except ImportError:
     SSL = ssl.create_default_context()
-VERSION = "1.7.1"             # bump for every release; build.bat tags the GitHub release with it
+VERSION = "1.8.0"             # bump for every release; build.bat tags the GitHub release with it
 REPO = "yishai946/Burn"        # GitHub repo whose releases the in-app updater checks
 FROZEN = getattr(sys, "frozen", False)  # running as the packaged Burner.exe
 RES = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))  # bundled files (index.html, ffmpeg.exe)
@@ -174,6 +174,8 @@ def load_playlist(url):
             name, tracks = _apple(url)
         elif "spotify.com" in url or url.startswith("spotify:"):
             name, tracks = _spotify(url)
+        elif YT_LIST.search(url):
+            name, tracks = _youtube_list(YT_LIST.search(url).group(1))
         else:
             raise ValueError("קישור לשיר מיוטיוב? הדבק אותו בתיבת החיפוש של שירים." if YT_LINK.search(url)
                              else "הדבק קישור לפלייליסט של Apple Music או Spotify.")
@@ -216,13 +218,67 @@ def youtube_audio_url(vid):
         return y.extract_info(f"https://www.youtube.com/watch?v={vid}", download=False)["url"]
 
 
-def _itunes(q, limit):
+def _itunes_song(x):
+    return {"title": x["trackName"], "artist": x["artistName"], "ms": int(x["trackTimeMillis"]),
+            "id": str(x["trackId"]), "preview": x.get("previewUrl"), "art": x.get("artworkUrl100")}
+
+
+def _itunes(q, limit, entity="song"):
     url = "https://itunes.apple.com/search?" + urllib.parse.urlencode(
-        {"term": q, "entity": "song", "limit": limit, "country": "il"})
-    return [{"title": x["trackName"], "artist": x["artistName"], "ms": int(x["trackTimeMillis"]),
-             "id": str(x["trackId"]), "preview": x.get("previewUrl"), "art": x.get("artworkUrl100")}
-            for x in json.loads(_get(url))["results"]
-            if x.get("trackName") and x.get("trackTimeMillis")]
+        {"term": q, "entity": entity, "limit": limit, "country": "il"})
+    return json.loads(_get(url))["results"]
+
+
+# ---------- lists in the search box: albums (Apple), playlists (YouTube) and pasted playlist links ----------
+YT_LIST = re.compile(r"youtube\.com/playlist\?(?:.*&)?list=([\w-]+)")
+
+
+def is_list_link(q):
+    return "spotify.com" in q or q.startswith("spotify:") or "music.apple.com" in q or bool(YT_LIST.search(q))
+
+
+def album_search(q, n=4):
+    return [{"kind": "list", "src": "album", "id": str(x["collectionId"]), "name": x["collectionName"], "artist": x.get("artistName", ""),
+             "count": x.get("trackCount"), "art": x.get("artworkUrl100")}
+            for x in _itunes(q, n, "album") if x.get("collectionId") and x.get("collectionName")]
+
+
+def youtube_lists(q, n=4):
+    with _ydl(extract_flat=True, skip_download=True, playlistend=n) as y:  # sp=EgIQAw%3D%3D: YouTube's "playlists" filter
+        info = y.extract_info("https://www.youtube.com/results?search_query=" + urllib.parse.quote(q) + "&sp=EgIQAw%3D%3D", download=False)
+    return [{"kind": "list", "src": "yt", "id": e["id"], "name": e.get("title") or "פלייליסט", "artist": e.get("channel") or e.get("uploader") or "",
+             "count": e.get("playlist_count"), "art": (e.get("thumbnails") or [{}])[-1].get("url")}
+            for e in (info or {}).get("entries") or [] if e and e.get("id")][:n]
+
+
+def _youtube_list(pid):
+    with _ydl(extract_flat=True, skip_download=True, playlistend=200) as y:
+        p = y.extract_info(f"https://www.youtube.com/playlist?list={pid}", download=False)
+    return p.get("title") or "פלייליסט מיוטיוב", [_yt_song(e["id"], e.get("title"), e.get("channel") or e.get("uploader"), e["duration"])
+                                                for e in p.get("entries") or [] if e and e.get("id") and e.get("duration")]
+
+
+def _apple_album(cid):
+    res = json.loads(_get(f"https://itunes.apple.com/lookup?id={cid}&entity=song&country=il"))["results"]
+    name = next((x.get("collectionName") for x in res if x.get("wrapperType") == "collection"), "אלבום")
+    return name, [_itunes_song(x) for x in res if x.get("wrapperType") == "track" and x.get("trackName") and x.get("trackTimeMillis")]
+
+
+def load_list(item):
+    """The songs of a list picked in the search box. Returns {name, url, tracks}."""
+    if item.get("tracks"):  # a pasted link, already read when it was searched
+        return {"name": item["name"], "url": item.get("url"), "tracks": item["tracks"]}
+    if item.get("src") == "album" and str(item.get("id", "")).isdigit():
+        name, tracks = _apple_album(item["id"])
+        url = None
+    elif item.get("src") == "yt" and re.fullmatch(r"[\w-]+", item.get("id", "")):
+        name, tracks = _youtube_list(item["id"])
+        url = f"https://www.youtube.com/playlist?list={item['id']}"
+    else:
+        raise ValueError("הרשימה הזו לא נמצאה. חפש שוב.")
+    if not tracks:
+        raise ValueError("לא נמצאו שירים ברשימה הזו.")
+    return {"name": name, "url": url, "tracks": tracks}
 
 
 def youtube_search(q, n=4):
@@ -242,7 +298,7 @@ def search_songs(q, limit=8):
             return [youtube_track(m.group(1))]
         except Exception as e:  # friendly_error keeps our own Hebrew messages as they are
             raise RuntimeError(friendly_error(e)) from e
-    return _itunes(q, limit) if len(q) >= 2 else []
+    return [_itunes_song(x) for x in _itunes(q, limit) if x.get("trackName") and x.get("trackTimeMillis")] if len(q) >= 2 else []
 
 
 # ---------- updates (GitHub releases) ----------
