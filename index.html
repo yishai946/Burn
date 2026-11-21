@@ -589,10 +589,15 @@ function render() {
     || '<div class="note">לא נבחרו שירים.</div>';
   // a nearly empty last disc wastes a blank: say how much to cut to save it
   const last = discs[n - 1], over = discs.reduce((a, d) => a + d.used, 0) - (n - 1) * S.cap;
-  const b = $('banner'); b.hidden = n < 2;
-  if (n > 1) b.textContent = last.used < S.cap / 5
+  // the same song checked twice would be burned twice: mark it and say so
+  const cnt = new Map();
+  idx.forEach(i => { const k = keyOf(S.tracks[i]); cnt.set(k, (cnt.get(k) || 0) + 1); });
+  const dup = i => S.sel.has(i) && cnt.get(keyOf(S.tracks[i])) > 1, dups = [...cnt.values()].filter(c => c > 1).length;
+  const b = $('banner'); b.hidden = n < 2 && !dups;
+  const dupText = dups ? `${dups === 1 ? 'שיר אחד מופיע' : dups + ' שירים מופיעים'} ברשימה יותר מפעם אחת (${dups === 1 ? 'מסומן' : 'מסומנים'} "כפול"). בטל את מה שמיותר כדי לא לצרוב אותו פעמיים. ` : '';
+  if (!b.hidden) b.textContent = dupText + (n < 2 ? '' : last.used < S.cap / 5
     ? `דיסק ${n} יכיל רק ${last.items.length === 1 ? 'שיר אחד' : last.items.length + ' שירים'} (${fmt(last.used)}). כדי לחסוך דיסק, בטל עוד כ־${fmt(over)} של שירים.`
-    : `יידרשו ${n} דיסקים ריקים. תתבקש להכניס כל אחד כשיגיע תורו.`;
+    : `יידרשו ${n} דיסקים ריקים. תתבקש להכניס כל אחד כשיגיע תורו.`);
   $('fstatus').innerHTML = `<b>${idx.length}</b> שירים · <span class="mono" dir="ltr">${fmt(total)}</span> · ${n ? discWord(n) : '—'} · ${S.fmt === 'mp3' ? 'MP3' : 'שמע'}`;
 
   const old = S.order.filter(i => S.tracks[i].burned).length;
@@ -607,7 +612,7 @@ function render() {
       html += `<div class="sep"><span>דיסק ${cur + 1}</span><div class="bar"><i style="width:${Math.min(100, d.used / full * 100)}%"></i></div><span class="mono" dir="ltr">${fmt(d.used)} / ${fmt(full)}</span></div>`;
     }
     html += `<div class="tr drg ${at ? '' : 'off'}${t.burned ? ' burned' : ''}" draggable="true" data-i="${i}" role="checkbox" tabindex="0" aria-checked="${!!at}">
-      <span class="grip" aria-hidden="true">⋮⋮</span><span class="chk">${CHECK}</span><span class="n mono">${at ? at[1] + 1 : ''}</span>${meta(t)}${tag(t)}${at ? '' : `<button class="del" type="button" data-d="${i}" aria-label="הסר מהרשימה" title="הסר מהרשימה"><svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button>`}${playBtn(i)}${dur(t.ms / 1000)}</div>`;
+      <span class="grip" aria-hidden="true">⋮⋮</span><span class="chk">${CHECK}</span><span class="n mono">${at ? at[1] + 1 : ''}</span>${meta(t)}${dup(i) ? '<span class="tag">כפול</span>' : ''}${tag(t)}${at ? '' : `<button class="del" type="button" data-d="${i}" aria-label="הסר מהרשימה" title="הסר מהרשימה"><svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button>`}${playBtn(i)}${dur(t.ms / 1000)}</div>`;
   }
   $('rows').innerHTML = html;
   $('burn').innerHTML = DISC + `<span>${n > 1 ? `הורד והכן ${n} דיסקים` : 'הורד והכן לצריבה'}</span>`;
