@@ -21,7 +21,7 @@ try:  # Python's own CA list can miss current issuers (GitHub failed); certifi's
     SSL = ssl.create_default_context(cafile=certifi.where())
 except ImportError:
     SSL = ssl.create_default_context()
-VERSION = "1.5.0"             # bump for every release; build.bat tags the GitHub release with it
+VERSION = "1.5.1"             # bump for every release; build.bat tags the GitHub release with it
 REPO = "yishai946/Burn"        # GitHub repo whose releases the in-app updater checks
 FROZEN = getattr(sys, "frozen", False)  # running as the packaged Burner.exe
 RES = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))  # bundled files (index.html, ffmpeg.exe)
@@ -175,7 +175,8 @@ def load_playlist(url):
         elif "spotify.com" in url or url.startswith("spotify:"):
             name, tracks = _spotify(url)
         else:
-            raise ValueError("הדבק קישור לפלייליסט של Apple Music או Spotify.")
+            raise ValueError("קישור לשיר מיוטיוב? הדבק אותו בתיבת החיפוש של שירים." if YT_LINK.search(url)
+                             else "הדבק קישור לפלייליסט של Apple Music או Spotify.")
     except (KeyError, IndexError, TypeError, json.JSONDecodeError) as e:
         # the page loaded but holds no playlist: a wrong/deleted link, or a private playlist
         friendly_error(e)  # log the details
@@ -185,9 +186,30 @@ def load_playlist(url):
     return {"name": name, "tracks": tracks}
 
 
+YT_LINK = re.compile(r"(?:youtube\.com/(?:watch\?(?:.*&)?v=|shorts/|embed/|live/)|youtu\.be/)([\w-]{11})")
+
+
+def youtube_track(vid):
+    """A song straight from a YouTube video, for when the name search can't find the right one."""
+    with _ydl(skip_download=True) as y:
+        x = y.extract_info(f"https://www.youtube.com/watch?v={vid}", download=False, process=False)
+    if not x.get("duration") or x.get("is_live"):
+        raise ValueError("זה שידור חי או סרטון בלי אורך ידוע. הדבק קישור לסרטון רגיל.")
+    artist = x.get("artist") or re.sub(r"\s*-\s*Topic$", "", x.get("uploader") or "YouTube")
+    title = x.get("track") or re.sub(rf"^{re.escape(artist)}\s*[-–]\s*", "", x.get("title") or vid, flags=re.I)  # "Artist - Song"
+    return {"title": title, "artist": artist, "ms": int(x["duration"] * 1000), "yt": vid,
+            "art": f"https://i.ytimg.com/vi/{vid}/mqdefault.jpg", "preview": None}
+
+
 def search_songs(q, limit=8):
-    """Song suggestions for the search box, from Apple's public iTunes Search API."""
+    """Song suggestions for the search box, from Apple's public iTunes Search API, or one song from a YouTube link."""
     q = q.strip()
+    m = YT_LINK.search(q)
+    if m:
+        try:
+            return [youtube_track(m.group(1))]
+        except Exception as e:  # friendly_error keeps our own Hebrew messages as they are
+            raise RuntimeError(friendly_error(e)) from e
     if len(q) < 2:
         return []
     url = "https://itunes.apple.com/search?" + urllib.parse.urlencode(
@@ -337,7 +359,7 @@ def _find_video(artist, title, ms):
 def download_track(track, dest_base, fmt="audio", on_pct=None):
     """Download one track: fmt "audio" -> 44.1kHz 16-bit stereo WAV, "mp3" -> tagged CBR MP3. Returns the path.
     on_pct(0..1) is called as the audio downloads."""
-    vid = _find_video(track["artist"], track["title"], track["ms"])
+    vid = track.get("yt") or _find_video(track["artist"], track["title"], track["ms"])  # "yt": pasted YouTube link
     if fmt == "mp3":  # ID3v2.3 tags: what car stereos show; many can't read the newer v2.4
         ext, pp = "mp3", {"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": str(MP3_KBPS)}
         args = ["-ar", "44100", "-id3v2_version", "3", "-metadata", f"title={track['title']}", "-metadata", f"artist={track['artist']}"]
