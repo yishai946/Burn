@@ -115,6 +115,10 @@ input[type=url]:focus{border-color:var(--accent)}
 .tr+.tr{border-top:1px solid var(--line)}
 .tr:hover{background:var(--surface2)}
 .tr.off{opacity:.45}
+.del{width:30px;height:30px;border-radius:50%;background:none;border:1px solid var(--line2);display:grid;place-items:center;flex:none;color:var(--muted)}
+.del svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.del:hover{color:var(--bad);border-color:var(--bad)}
+.tr.off:has(.del:hover){opacity:1}
 .n{width:24px;color:var(--muted);font-size:13px;text-align:center;flex:none}
 .chk{width:20px;height:20px;border-radius:6px;border:1.5px solid var(--line2);display:grid;place-items:center;flex:none;background:var(--surface)}
 .tr:not(.off) .chk{background:var(--accent);border-color:var(--accent)}
@@ -161,8 +165,8 @@ input[type=url]:focus{border-color:var(--accent)}
   background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px}
 .recent h2{font-size:15px;font-weight:700}
 .grid{display:flex;flex-direction:column;gap:4px}
-.grid button{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:10px 12px;border-radius:10px;background:none;border:1px solid transparent;text-align:start;width:100%}
-.grid button:hover{background:var(--surface2);border-color:var(--line)}
+.grid>button{display:flex;flex-direction:column;align-items:flex-start;gap:2px;padding:10px 12px;border-radius:10px;background:none;border:1px solid transparent;text-align:start;width:100%}
+.grid>button:hover{background:var(--surface2);border-color:var(--line)}
 .grid b{font-weight:700;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .grid span{color:var(--muted);font-size:13px}
 .grid span span{white-space:nowrap}
@@ -171,7 +175,8 @@ input[type=url]:focus{border-color:var(--accent)}
 .play{width:30px;height:30px;border-radius:50%;background:none;border:1px solid var(--line2);display:grid;place-items:center;flex:none}
 .play svg{width:11px;height:11px;fill:currentColor}
 .play:hover,.play.on{background:var(--accent);color:var(--on-accent);border-color:var(--accent)}
-.grip{color:var(--muted);cursor:grab;font-size:15px;letter-spacing:-2px;width:14px;text-align:center;flex:none}
+.grip{color:var(--muted);cursor:grab;font-size:18px;letter-spacing:-2px;width:32px;align-self:stretch;margin-block:-10px;margin-inline-start:-12px;display:grid;place-items:center;border-start-start-radius:10px;border-end-start-radius:10px;flex:none}
+.grip:hover{background:var(--line);color:var(--text)}
 .tr.drg{cursor:grab}
 .tr.drag{opacity:.35}
 .tr.over-top{box-shadow:0 -2px 0 var(--accent)} .tr.over-bot{box-shadow:0 2px 0 var(--accent)}
@@ -255,6 +260,19 @@ body.has-foot .queue{bottom:96px}
 .qskip{font-size:12.5px;color:var(--warn)}
 .qskip summary{cursor:pointer}
 .qskip div{color:var(--muted);margin-top:4px}
+.qdiscs{font-size:12.5px}
+.qdiscs summary{cursor:pointer;color:var(--accent);font-weight:700}
+.qdiscs b{display:block;margin-top:8px}
+.qdiscs ol{margin:2px 0 0;padding-inline-start:22px;color:var(--muted)}
+.qdiscs .past{opacity:.5}
+.hrow{display:flex;flex-direction:column;align-items:stretch;gap:4px;padding:12px;border-radius:10px;border:1px solid var(--line)}
+.htop{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.htop b{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hmeta{color:var(--muted);font-size:13px;overflow-wrap:anywhere}
+.hst{flex:none;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:700;border:1px solid currentColor}
+.hst.ok{color:var(--ok)} .hst.warn{color:var(--warn)} .hst.bad{color:var(--bad)} .hst.muted{color:var(--muted)}
+.hbtns{display:flex;gap:8px;margin-top:4px}
+.hbtns button{height:34px;padding:0 14px;font-size:14px}
 .qbtns{display:flex;gap:6px;justify-content:flex-end}
 .qbtns:empty{display:none}
 .qbtns .primary{height:36px;padding:0 18px;font-size:14px}
@@ -268,7 +286,7 @@ body.has-foot .queue{bottom:96px}
     <b>Burner</b><span>פלייליסט ← דיסקים</span>
   </div>
   <div class="tools">
-    <button class="theme" id="hist" type="button" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></svg><span>נצרבו לאחרונה</span></button>
+    <button class="theme" id="hist" type="button" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></svg><span>היסטוריה</span></button>
     <button class="theme" id="help" type="button" aria-label="סיור באפליקציה"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6v.6"/><path d="M12 17.2v.1"/></svg><span>עזרה</span></button>
     <button class="theme" id="chkupd" type="button" aria-label="בדוק עדכונים"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg><span>בדוק עדכונים</span></button>
     <button class="theme" id="theme" type="button"></button>
@@ -297,6 +315,10 @@ body.has-foot .queue{bottom:96px}
           <span class="ic"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg></span>
           <b>מחיפוש שירים</b><span>בנה רשימה משלך, שיר אחרי שיר</span>
         </button>
+      </div>
+      <div class="recent" id="drafts" hidden>
+        <h2>רשימות שלא סיימת</h2>
+        <div class="grid" id="dgrid"></div>
       </div>
       <div class="fmt">
         <span id="fmt-l">סוג דיסק</span>
@@ -339,8 +361,8 @@ body.has-foot .queue{bottom:96px}
 
     <div class="page" id="p-history" hidden>
       <button class="ghost back" type="button" data-go="choose">→ חזרה</button>
-      <h1>נצרבו לאחרונה</h1>
-      <p>פלייליסטים שצרבת. לחיצה על פלייליסט טוענת אותו שוב.</p>
+      <h1>היסטוריה</h1>
+      <p>כל רשימה ששלחת לתור: מה נצרב, מה הורד, מה בוטל ומה נכשל.</p>
       <div class="recent" id="recent">
         <div class="grid" id="rgrid"></div>
         <nav class="pager" id="pager" aria-label="עמודי היסטוריה">
@@ -491,6 +513,33 @@ function plan(idx) {                       // same rule as core.plan_discs
   return discs;
 }
 const selected = () => S.order.filter(i => S.sel.has(i));  // in the arranged order
+
+// drafts: a list the user changed is saved as they work, so they can leave and come back to it
+const drafts = () => { try { return JSON.parse(localStorage.getItem('drafts')) || []; } catch (e) { return []; } };
+function putDrafts(d) {
+  try { localStorage.setItem('drafts', JSON.stringify(d.slice(0, 10))); } catch (e) {}
+  paintDrafts();
+}
+function saveDraft() {
+  if (!S.dirty) return;
+  S.draft = S.draft || Date.now();
+  putDrafts([{ id: S.draft, name: S.name, url: S.url, from: S.from, tracks: S.tracks, order: S.order, sel: [...S.sel],
+    at: new Date().toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'short' }) }, ...drafts().filter(d => d.id !== S.draft)]);
+}
+function paintDrafts() {
+  const d = drafts(); $('drafts').hidden = !d.length;
+  $('dgrid').innerHTML = d.map(x => `<div class="hrow"><div class="htop"><b dir="auto">${esc(x.name)}</b></div>
+    <span class="hmeta">${x.order.length} שירים · ${x.sel.length} נבחרו · <span dir="ltr">${esc(x.at)}</span></span>
+    <div class="hbtns"><button class="primary" type="button" data-open="${x.id}">המשך</button><button class="ghost" type="button" data-drop="${x.id}">מחק</button></div></div>`).join('');
+}
+$('dgrid').onclick = e => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.drop) { if (confirm('למחוק את הרשימה הזו?')) putDrafts(drafts().filter(x => x.id !== +b.dataset.drop)); return; }
+  const d = drafts().find(x => x.id === +b.dataset.open); if (!d) return;
+  Object.assign(S, { tracks: d.tracks, order: d.order, sel: new Set(d.sel), name: d.name, url: d.url, from: d.from });
+  $('pname').textContent = S.name; noPreview.clear(); setCover();
+  S.draft = d.id; S.dirty = true; render();
+};
 // 30s preview player (one track at a time)
 const player = new Audio(); let playing = null, waiting = null;
 const noPreview = new Set();
@@ -530,10 +579,11 @@ function render() {
   const has = S.tracks.length > 0;
   $('start').hidden = has; $('work').hidden = !has; $('foot').hidden = !has;
   document.body.classList.toggle('has-foot', has);
-  if (!has) return;
+  if (!has) { S.draft = null; S.dirty = false; return; }
+  saveDraft();
   const idx = selected(), discs = plan(idx), full = S.cap + (S.fmt === 'mp3' ? 0 : 60), n = discs.length;
   const total = idx.reduce((a, i) => a + secs(i), 0);
-  $('pmeta').textContent = `${S.tracks.length} שירים · ${fmt(S.tracks.reduce((a, t) => a + t.ms / 1000, 0))}`;
+  $('pmeta').textContent = `${S.order.length} שירים · ${fmt(S.order.reduce((a, i) => a + secs(i), 0))}`;
   $('discs').innerHTML = discs.map((d, k) => `<div class="disc"><div class="h"><b>דיסק ${k + 1}</b><span class="mono" dir="ltr">${fmt(d.used)} / ${fmt(full)}</span></div>
     <div class="bar"><i style="width:${Math.min(100, d.used / full * 100)}%"></i></div><span class="s">${d.items.length} שירים · ${fmt(Math.max(0, full - d.used))} פנוי</span></div>`).join('')
     || '<div class="note">לא נבחרו שירים.</div>';
@@ -545,9 +595,9 @@ function render() {
     : `יידרשו ${n} דיסקים ריקים. תתבקש להכניס כל אחד כשיגיע תורו.`;
   $('fstatus').innerHTML = `<b>${idx.length}</b> שירים · <span class="mono" dir="ltr">${fmt(total)}</span> · ${n ? discWord(n) : '—'} · ${S.fmt === 'mp3' ? 'MP3' : 'שמע'}`;
 
-  const old = S.tracks.filter(t => t.burned).length;
-  $('summary').textContent = `${idx.length} מתוך ${S.tracks.length} נבחרו · לחץ לבחירה, גרור לשינוי הסדר` + (old ? ` · ${old} כבר נצרבו בעבר` : '');
-  $('all').textContent = S.sel.size === S.tracks.length ? 'נקה הכל' : 'בחר הכל';
+  const old = S.order.filter(i => S.tracks[i].burned).length;
+  $('summary').textContent = `${idx.length} מתוך ${S.order.length} נבחרו · לחץ לבחירה, גרור לשינוי הסדר` + (old ? ` · ${old} כבר נצרבו בעבר` : '');
+  $('all').textContent = S.sel.size === S.order.length ? 'נקה הכל' : 'בחר הכל';
   const discOf = new Map(); discs.forEach((d, k) => d.items.forEach((i, p) => discOf.set(i, [k, p])));
   let html = '', cur = -1;
   for (const i of S.order) {
@@ -557,7 +607,7 @@ function render() {
       html += `<div class="sep"><span>דיסק ${cur + 1}</span><div class="bar"><i style="width:${Math.min(100, d.used / full * 100)}%"></i></div><span class="mono" dir="ltr">${fmt(d.used)} / ${fmt(full)}</span></div>`;
     }
     html += `<div class="tr drg ${at ? '' : 'off'}${t.burned ? ' burned' : ''}" draggable="true" data-i="${i}" role="checkbox" tabindex="0" aria-checked="${!!at}">
-      <span class="grip" aria-hidden="true">⋮⋮</span><span class="chk">${CHECK}</span><span class="n mono">${at ? at[1] + 1 : ''}</span>${meta(t)}${tag(t)}${playBtn(i)}${dur(t.ms / 1000)}</div>`;
+      <span class="grip" aria-hidden="true">⋮⋮</span><span class="chk">${CHECK}</span><span class="n mono">${at ? at[1] + 1 : ''}</span>${meta(t)}${tag(t)}${at ? '' : `<button class="del" type="button" data-d="${i}" aria-label="הסר מהרשימה" title="הסר מהרשימה"><svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button>`}${playBtn(i)}${dur(t.ms / 1000)}</div>`;
   }
   $('rows').innerHTML = html;
   $('burn').innerHTML = DISC + `<span>${n > 1 ? `הורד והכן ${n} דיסקים` : 'הורד והכן לצריבה'}</span>`;
@@ -565,16 +615,23 @@ function render() {
 }
 
 // click toggles a song, drag reorders it
-const toggle = r => { const i = +r.dataset.i; S.sel.has(i) ? S.sel.delete(i) : S.sel.add(i); render(); };
+const toggle = r => {
+  const i = +r.dataset.i;
+  if (S.sel.has(i)) { S.sel.delete(i); S.order = [...S.order.filter(x => x !== i), i]; }  // unselected songs sink to the bottom
+  else S.sel.add(i);
+  S.dirty = true; render();
+};
 $('rows').addEventListener('click', e => {
   if (onPlay(e)) return;
+  const d = e.target.closest('.del');
+  if (d) { const i = +d.dataset.d; S.order = S.order.filter(x => x !== i); S.sel.delete(i); S.dirty = true; render(); return; }
   const r = e.target.closest('.tr'); if (r) toggle(r);
 });
 $('rows').addEventListener('keydown', e => {
   if ((e.key !== ' ' && e.key !== 'Enter') || !e.target.matches('.tr')) return;
   e.preventDefault(); const i = e.target.dataset.i; toggle(e.target); document.querySelector(`.tr[data-i="${i}"]`)?.focus();
 });
-$('all').onclick = () => { S.sel = S.sel.size === S.tracks.length ? new Set() : new Set(S.tracks.keys()); render(); };
+$('all').onclick = () => { S.sel = S.sel.size === S.order.length ? new Set() : new Set(S.order); S.dirty = true; render(); };
 
 let dragI = null;
 const rowOf = e => e.target.closest('.tr.drg');
@@ -592,6 +649,7 @@ $('rows').ondrop = e => {
   if (to !== dragI) {
     S.order = S.order.filter(i => i !== dragI);
     S.order.splice(S.order.indexOf(to) + (after ? 1 : 0), 0, dragI);
+    S.dirty = true;
   }
   dragI = null; render();
 };
@@ -600,12 +658,10 @@ $('rows').ondragend = () => { dragI = null; render(); };
 $('new').onclick = () => { stopPlay(); S.tracks = []; S.order = []; render(); history(); go('choose'); };
 // back to the page the list came from; a list built by search exists only here, so confirm first
 $('back').onclick = () => {
-  if (S.from === 'search' && S.tracks.length > 1 && !confirm('לחזור לחיפוש? הרשימה שבנית תימחק.')) return;
   stopPlay(); S.tracks = []; S.order = []; render(); history(); go(S.from || 'choose');
 };
 $('hist').onclick = () => {
   if (S.tracks.length) {
-    if (S.from === 'search' && S.tracks.length > 1 && !confirm('לעבור להיסטוריה? הרשימה שבנית תימחק.')) return;
     stopPlay(); S.tracks = []; S.order = []; render();
   }
   go('history');
@@ -629,12 +685,28 @@ function paintRecent() {
   $('pager').hidden = pages < 2;
   $('pinfo').textContent = `עמוד ${page + 1} מתוך ${pages}`;
   $('pprev').disabled = page === 0; $('pnext').disabled = page >= pages - 1;
-  $('rgrid').innerHTML = recent.slice(page * PAGE, page * PAGE + PAGE).map((p, j) => [p, page * PAGE + j]).map(([p, k]) => `<button type="button" data-k="${k}"><b dir="auto">${esc(p.name)}</b>
-    <span>${p.count} שירים · ${p.discs > 1 ? p.discs + ' דיסקים' : 'דיסק אחד'} · <span dir="ltr">${esc(p.at || '')}</span></span></button>`).join('');
+  $('rgrid').innerHTML = recent.slice(page * PAGE, page * PAGE + PAGE).map((p, j) => histRow(p, page * PAGE + j)).join('');
+}
+const HST = { burned: ['נצרב', 'ok'], partial: ['נצרב חלקית', 'warn'], downloaded: ['הורד', 'ok'], cancelled: ['בוטל', 'muted'], failed: ['נכשל', 'bad'] };
+const DST = { burned: 'נצרב', cancelled: 'בוטל', failed: 'לא נצרב' };
+const songList = l => `<ol>${l.map(x => `<li dir="auto">${esc(x)}</li>`).join('')}</ol>`;
+function histRow(p, k) {
+  const [label, cls] = HST[p.status] || HST.burned, discs = p.discs || [], nd = p.ndiscs || discs.length;
+  const done = discs.filter(d => d.state === 'burned').length;
+  const meta = [`<span dir="ltr">${esc(p.at || '')}</span>`, `${p.count} שירים`,
+    nd > 1 ? (p.status === 'partial' ? `${done} מתוך ${nd} דיסקים נצרבו` : `${nd} דיסקים`) : '',
+    p.fmt ? (p.fmt === 'mp3' ? 'MP3' : 'שמע') : ''].filter(Boolean).join(' · ');
+  const body = discs.map((d, n) => `<b>דיסק ${n + 1} · ${DST[d.state]}</b>${songList(d.songs)}`).join('')
+    + (p.songs?.length ? songList(p.songs) : '')
+    + (p.skipped?.length ? `<b>דולגו (${p.skipped.length})</b>${songList(p.skipped)}` : '');
+  return `<div class="hrow"><div class="htop"><b dir="auto">${esc(p.name)}</b><span class="hst ${cls}">${label}</span></div>
+    <span class="hmeta">${meta}</span>${p.msg ? `<span class="hmeta" dir="auto">${esc(p.msg)}</span>` : ''}
+    ${body ? `<details class="qdiscs"><summary>אילו שירים</summary>${body}</details>` : ''}
+    ${p.url ? `<div class="hbtns"><button class="ghost" type="button" data-k="${k}">טען שוב</button></div>` : ''}</div>`;
 }
 $('pprev').onclick = () => { page--; paintRecent(); };
 $('pnext').onclick = () => { page++; paintRecent(); };
-$('rgrid').onclick =e => { const b = e.target.closest('button'); if (!b || !recent[b.dataset.k].url) return; $('url').value = recent[b.dataset.k].url; go('link'); load(); };
+$('rgrid').onclick = e => { const b = e.target.closest('button[data-k]'); if (!b || !recent[b.dataset.k].url) return; $('url').value = recent[b.dataset.k].url; go('link'); load(); };
 
 async function load() {
   const url = $('url').value.trim(); if (!url) return;
@@ -665,8 +737,9 @@ function addTrack(t) {
     $('pname').textContent = S.name;
   }
   let i = S.tracks.findIndex(x => keyOf(x) === keyOf(t));
-  if (i < 0) { i = S.tracks.push(t) - 1; S.order.push(i); }
-  S.sel.add(i); setCover(); render();
+  if (i < 0) i = S.tracks.push(t) - 1;
+  if (!S.order.includes(i)) S.order.push(i);  // new, or removed earlier with the trash button
+  S.sel.add(i); S.dirty = true; setCover(); render();
   document.querySelector(`.tr[data-i="${i}"]`)?.scrollIntoView({ block: 'nearest' });
   $('q2').focus();
 }
@@ -686,7 +759,7 @@ function makeSearch(input, list) {
       if (my !== seq) return;              // a newer search already started
       if (!r.ok) { show(`<li class="msg">${esc(r.msg)}</li>`); return; }
       items = r.tracks; active = -1;
-      const inList = new Set(S.tracks.map(keyOf));
+      const inList = new Set(S.order.map(i => keyOf(S.tracks[i])));
       show(items.length ? items.map((t, k) => `<li role="option" id="${list.id}-${k}" data-k="${k}" aria-selected="false">${meta(t)}${tag(t)}${inList.has(keyOf(t)) ? '<span class="in">ברשימה</span>' : ''}${dur(t.ms / 1000)}</li>`).join('')
         : '<li class="msg">לא נמצאו שירים</li>');
     }, 300);
@@ -737,6 +810,7 @@ const enqueue = async only => {
   stopPlay();
   const r = await pywebview.api.enqueue(selected().map(i => S.tracks[i]), S.name, S.url, S.fmt, only);
   if (!r.ok) { modal('אי אפשר להוסיף לתור', r.msg, 0, [['אישור', close, true]]); return; }
+  putDrafts(drafts().filter(x => x.id !== S.draft));  // sent to the queue: no longer unfinished
   // the list now downloads in the background: free the screen for the next one
   qOpen = true; S.tracks = []; S.order = []; render(); history(); go('choose');
 };
@@ -777,6 +851,8 @@ function renderQueue() {
       <div class="qtext" dir="auto">${esc(l.text)}</div>
       ${j.state === 'done' || j.state === 'error' ? '' : `<div class="bar"><i style="width:${Math.min(100, l.pct)}%"></i></div>`}
       ${skipped}
+      ${j.discs > 1 && j.state !== 'done' ? `<details class="qdiscs"><summary>אילו שירים בכל דיסק</summary>${j.disc_lists.map((d, k) =>
+        `<div class="${k < j.disc ? 'past' : ''}"><b>דיסק ${k + 1}${k < j.disc ? ' · נצרב' : k === j.disc ? ' · הבא בתור' : ''}</b><ol>${d.map(x => `<li dir="auto">${esc(x)}</li>`).join('')}</ol></div>`).join('')}</details>` : ''}
       <div class="qbtns">
         ${canBurn ? `<button class="primary" type="button" data-burn="${j.id}" ${S.ready ? '' : 'disabled'}>צרוב${j.discs > 1 ? ` דיסק ${j.disc + 1}` : ''}</button>` : ''}
         ${j.state === 'burning' ? '' : `<button class="ghost" type="button" data-cancel="${j.id}">${j.state === 'done' || j.state === 'error' ? 'הסר' : 'בטל'}</button>`}
@@ -801,9 +877,10 @@ confirmClose(burning) {
            ['ביטול', close]]);
 },
 jobs(list) {
-  const wasDone = new Set(S.jobs.filter(j => j.state === 'done').map(j => j.id));
+  const key = l => l.map(j => j.id + j.state).join();
+  const ended = list.length < S.jobs.length || key(list.filter(j => j.state === 'done' || j.state === 'error')) !== key(S.jobs.filter(j => j.state === 'done' || j.state === 'error'));
   S.jobs = list;
-  if (list.some(j => j.state === 'done' && !wasDone.has(j.id))) history();  // a burn finished: refresh "recently burned"
+  if (ended) history();  // a list finished, failed or was cancelled: refresh the history
   renderQueue();
 },
 progress(p) {
@@ -851,7 +928,7 @@ render = function () {                     // first time the songs screen appear
 };
 if (!seen('tourStart')) setTimeout(() => tour('start'), 300);
 
-render();
+render(); paintDrafts();
 async function checkUpdate(manual) {
   const u = await pywebview.api.check_update(!!manual); if (!u) return;
   if (u.error) { modal('לא הצלחנו לבדוק עדכונים', u.error, 0, [['סגור', close, true]]); return; }

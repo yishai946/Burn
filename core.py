@@ -228,7 +228,23 @@ def load_history():
         h = {"playlists": [], "songs": {}}
     if isinstance(h["songs"], list):  # old format: keys only, no playlist name
         h["songs"] = dict.fromkeys(h["songs"])
+    if "log" not in h:  # before the activity log: every saved playlist was a finished burn
+        h["log"] = [{**p, "status": "burned", "ndiscs": p.get("discs", 1), "discs": [], "songs": []} for p in h["playlists"]]
     return h
+
+
+def _save_history(h):
+    tmp = HISTORY + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(h, f, ensure_ascii=False, indent=1)
+    os.replace(tmp, HISTORY)
+
+
+def log_job(entry):
+    """One line in the activity history: a list that was burned, downloaded, cancelled or failed."""
+    h = load_history()
+    h["log"] = [entry] + h["log"][:299]
+    _save_history(h)
 
 
 def mark_burned(tracks):
@@ -248,10 +264,7 @@ def record_burn(tracks, playlist=None):
         h["songs"][k] = name or h["songs"].get(k)  # latest burn wins; keep a known name over none
     if playlist:
         h["playlists"] = [playlist] + [p for p in h["playlists"] if not (playlist.get("url") and p.get("url") == playlist.get("url"))]
-    tmp = HISTORY + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(h, f, ensure_ascii=False, indent=1)
-    os.replace(tmp, HISTORY)
+    _save_history(h)
 
 
 # ---------- disc planning ----------

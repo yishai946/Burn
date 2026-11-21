@@ -103,7 +103,7 @@ class Api:
 
     def history(self):
         try:
-            return core.load_history()["playlists"]
+            return core.load_history()["log"]
         except Exception:
             return []
 
@@ -120,7 +120,7 @@ class Api:
             self._next_id += 1
             job = {"id": self._next_id, "name": name or "פלייליסט", "url": url, "fmt": "mp3" if fmt == "mp3" else "audio",
                    "tracks": tracks, "state": "queued", "i": 0, "n": len(tracks), "current": "", "skipped": [],
-                   "discs": [], "disc": 0, "msg": "", "files": [], "got": [], "tmp": None, "cancel": False, "only": bool(only)}
+                   "discs": [], "disc": 0, "msg": "", "files": [], "got": [], "tmp": None, "cancel": False, "only": bool(only), "logged": False}
             self._jobs.append(job)
         self._push()
         self._wake.set()
@@ -143,6 +143,7 @@ class Api:
     def clear_restored(self):
         with self._lock:
             for j in list(self._jobs):
+                self._log_cancel(j)
                 self._remove(j)
             self._hold = False
         self._push()
@@ -204,6 +205,7 @@ class Api:
             if job["state"] == "downloading":
                 job["cancel"] = True  # the downloader stops after the current song and removes the list
             else:
+                self._log_cancel(job)
                 self._remove(job)
         self._push()
         return {"ok": True}
@@ -228,10 +230,12 @@ class Api:
     def _snapshot(self):
         keep = ("id", "name", "fmt", "only", "state", "i", "n", "current", "skipped", "disc", "msg")
         return [{**{k: j[k] for k in keep}, "discs": len(j["discs"]),
-                 "disc_songs": len(j["discs"][j["disc"]]) if j["disc"] < len(j["discs"]) else 0} for j in self._jobs]
+                 "disc_songs": len(j["discs"][j["disc"]]) if j["disc"] < len(j["discs"]) else 0,
+                 "disc_lists": [[f"{j['files'][k][0]['artist']} – {j['files'][k][0]['title']}" for k in d] for d in j["discs"]]}
+                for j in self._jobs]
 
     QUEUE = os.path.join(core.DATA, "queue.json")
-    SAVED = ("id", "name", "url", "fmt", "tracks", "state", "skipped", "discs", "disc", "msg", "files", "got", "tmp", "only")
+    SAVED = ("id", "name", "url", "fmt", "tracks", "state", "skipped", "discs", "disc", "msg", "files", "got", "tmp", "only", "logged")
 
     def _save(self):
         with self._lock:
@@ -256,6 +260,7 @@ class Api:
                 j["files"] = [f for f in j["files"] if os.path.exists(f[1])]  # downloaded songs that are still on disk
                 j["got"] = [i for i in j["got"] if any(f[1].endswith(f"{i:03d}.wav") or f[1].endswith(f"{i:03d}.mp3") for f in j["files"])]
                 j.setdefault("only", False)  # queues saved before download-only existed
+                j.setdefault("logged", False)
                 j.update(i=0, n=len(j["tracks"]), current="", cancel=False, was_burning=j["state"] == "burning")
                 if j["state"] in ("downloading", "queued") or (j["state"] in ("ready", "burning") and len(j["got"]) + len(j["skipped"]) < j["n"]):
                     j["state"], j["discs"] = "queued", []
@@ -305,6 +310,7 @@ class Api:
                     continue  # done before Burner was closed
                 if job["cancel"]:
                     with self._lock:
+                        self._log(job, "cancelled")
                         self._remove(job)
                     return
                 job["i"], job["current"] = i, f"{t['artist']} – {t['title']}"
@@ -339,7 +345,31 @@ class Api:
         except Exception as e:
             job["state"], job["msg"] = "error", core.friendly_error(e)
         finally:
+            if job["state"] == "error":
+                self._log(job, "failed")
             self._push()
+
+    def _log_cancel(self, job):
+        """The user dropped a list that hadn't finished: cancelled, or partly burned if some discs were done."""
+        if job["state"] in ("queued", "downloading", "ready"):
+            self._log(job, "partial" if job["disc"] else "cancelled")
+
+    def _log(self, job, status):
+        """Write the list to the activity history once, with what happened to each disc."""
+        if job.get("logged"):
+            return
+        job["logged"] = True
+        song = lambda t: f"{t['artist']} – {t['title']}"
+        rest = "failed" if status == "failed" else "cancelled"
+        discs = [{"songs": [song(job["files"][k][0]) for k in d], "state": "burned" if n < job["disc"] else rest}
+                 for n, d in enumerate(job["discs"])]
+        songs = [] if discs else [song(f[0]) for f in job["files"]] or [song(t) for t in job["tracks"]]
+        try:
+            core.log_job({"name": job["name"], "url": job["url"], "fmt": job["fmt"], "status": status,
+                          "at": time.strftime("%Y-%m-%d %H:%M"), "count": len(job["tracks"]), "ndiscs": len(discs),
+                          "discs": discs, "songs": songs, "skipped": job["skipped"], "msg": job["msg"]})
+        except Exception as e:
+            core.friendly_error(e)  # logged; history is a record, it must not break the queue
 
     def _export(self, job):
         """Download-only list: move the songs, numbered in order, to Downloads\<list name>, then open that folder."""
@@ -352,9 +382,11 @@ class Api:
         os.makedirs(out)
         for k, (t, p, _) in enumerate(job["files"], 1):
             shutil.move(p, os.path.join(out, os.path.splitext(core.disc_name(k, t))[0] + os.path.splitext(p)[1]))
+        job["msg"] = f"נשמר בתיקייה {out}"
+        self._log(job, "downloaded")
         shutil.rmtree(job["tmp"], ignore_errors=True)
         job["tmp"], job["files"] = None, []
-        job["state"], job["current"], job["i"], job["msg"] = "done", "", 0, f"נשמר בתיקייה {out}"
+        job["state"], job["current"], job["i"] = "done", "", 0
         try:
             os.startfile(out)
         except OSError:
@@ -379,9 +411,7 @@ class Api:
                     self._push()
                 core.burn_disc([files[k][1] for k in idx], on_track)
             try:  # only songs on a disc that finished burning count as burned
-                core.record_burn([files[k][0] for k in idx],
-                                 {"name": job["name"], "url": job["url"], "count": len(job["tracks"]),
-                                  "discs": len(job["discs"]), "at": time.strftime("%Y-%m-%d")})
+                core.record_burn([files[k][0] for k in idx])
             except Exception:
                 pass
             job["disc"] += 1
@@ -389,6 +419,7 @@ class Api:
                 job["state"] = "ready"  # waits for the next blank disc
             else:
                 job["state"] = "done"
+                self._log(job, "burned")
                 shutil.rmtree(job["tmp"], ignore_errors=True)
                 job["tmp"] = None
         except Exception as e:
