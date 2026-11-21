@@ -895,22 +895,26 @@ const step = (element, title, description, side) => ({ element, popover: { title
 function tour(which) {
   const visible = sel => { const el = document.querySelector(sel); return el && el.offsetParent !== null; };
   const steps = which === 'work' ? [
-    step('#rows .tr', 'הרשימה שלך', 'לחיצה על שיר מסמנת או מבטלת אותו. גרור שיר כדי לשנות את הסדר. הכפתור ▶ משמיע קטע של 30 שניות.', 'bottom'),
+    step('#rows .tr', 'הרשימה שלך', 'לחיצה על שיר מסמנת או מבטלת אותו. שיר שביטלת יורד לסוף הרשימה, ולידו מופיע פח למחיקה. הכפתור ▶ משמיע קטע של 30 שניות.', 'bottom'),
+    step('#rows .grip', 'שינוי סדר', 'תופסים את הידית ⋮⋮ וגוררים את השיר למקום אחר ברשימה.', 'left'),
     step('.addbar', 'הוספת שירים', 'חפש שיר או אמן ובחר מההצעות כדי להוסיף לרשימה.', 'bottom'),
     step('#discs', 'חלוקה לדיסקים', 'Burner מחלק את השירים לדיסקים של 80 דקות, לפי הסדר, בלי לחתוך שיר באמצע.', 'left'),
     visible('#banner') && step('#banner', 'שים לב', 'כאן תופיע אזהרה כשדיסק כמעט ריק, עם כמה דקות לבטל כדי לחסוך דיסק.', 'bottom'),
-    step('#burn', 'הורדה וצריבה', 'לחיצה כאן מוסיפה את הרשימה לתור. השירים יורדים ברקע ואפשר להמשיך לעבוד. כשהרשימה מוכנה, היא מופיעה בחלון התור למטה משמאל: מכניסים דיסק ריק ולוחצים צרוב.', 'top'),
-    step('#back', 'חזרה', 'חוזר למסך הקודם כדי להתחיל רשימה אחרת.', 'bottom'),
+    step('#burn', 'הורדה וצריבה', 'לחיצה כאן מוסיפה את הרשימה לתור. השירים יורדים ברקע ואפשר להמשיך לעבוד. כשהרשימה מוכנה, היא מופיעה בחלון התור למטה משמאל: מכניסים דיסק ריק ולוחצים צרוב. אם יש כמה דיסקים, שם רואים אילו שירים בכל דיסק.', 'top'),
+    step('#dlonly', 'רק להוריד', 'לא צריך דיסק? השירים יורדו לתיקייה בשם הרשימה בתוך "הורדות", ממוספרים לפי הסדר.', 'top'),
+    step('#back', 'חזרה', 'חוזר למסך הקודם. אם שינית משהו ברשימה, היא נשמרת ותוכל להמשיך אותה מהמסך הראשי.', 'bottom'),
   ] : [
     { popover: { title: 'ברוך הבא ל־Burner', description: 'Burner צורב שירים לדיסק שמע שמתנגן בכל נגן: ברכב, במערכת או בדיסקמן. סיור קצר של כמה צעדים.' } },
     step('.choices', 'בחר איך להתחיל', 'הדבק קישור לפלייליסט מ־Spotify או Apple Music, או חפש שירים ובנה רשימה משלך.', 'top'),
+    visible('#drafts') && step('#drafts', 'רשימות שלא סיימת', 'רשימה ששינית ולא שלחת לצריבה נשמרת כאן. "המשך" פותח אותה בדיוק איפה שעזבת.', 'top'),
     step('.fmt', 'סוג דיסק', 'דיסק שמע מתנגן בכל נגן, עד 80 דקות. דיסק MP3 מחזיק כ־8 שעות, אבל רק לנגן שתומך ב־MP3. סימן השאלה מסביר את ההבדל.', 'top'),
-    visible('#hist') && step('#hist', 'נצרבו לאחרונה', 'פלייליסטים שצרבת. לחיצה כאן פותחת אותם, ובחירה טוענת אותם שוב.', 'bottom'),
+    visible('#hist') && step('#hist', 'היסטוריה', 'כל רשימה ששלחת לתור, עם מה שקרה לה: נצרב, נצרב חלקית, הורד, בוטל או נכשל. אפשר לראות אילו שירים היו בכל דיסק ולטעון רשימה שוב.', 'bottom'),
     step('#chip', 'מצב הצורב', 'נקודה ירוקה: יש דיסק ריק ואפשר לצרוב. כתומה או אדומה: צריך להכניס דיסק או לחבר צורב.', 'bottom'),
     step('#theme', 'בהיר או כהה', 'מחליף בין ערכת המערכת, בהיר וכהה.', 'bottom'),
+    step('#chkupd', 'עדכונים', 'Burner בודק לבד אם יש גרסה חדשה בכל פתיחה. אפשר גם לבדוק מכאן בכל רגע.', 'bottom'),
     step('#help', 'עזרה', 'אפשר להפעיל את הסיור שוב בכל רגע מכאן. במסך השירים יש סיור משלו.', 'bottom'),
   ];
-  const key = which === 'work' ? 'tourWork' : 'tourStart';
+  const key = which === 'work' ? 'tourWork2' : 'tourStart2';
   window.driver.js.driver({
     steps: steps.filter(Boolean), showProgress: true, popoverClass: 'burner-tour', stagePadding: 6, stageRadius: 12,
     nextBtnText: 'הבא', prevBtnText: 'הקודם', doneBtnText: 'סיום', progressText: '{{current}} מתוך {{total}}',
@@ -920,13 +924,13 @@ function tour(which) {
 const seen = key => { try { return !!localStorage.getItem(key); } catch (e) { return true; } };
 $('chkupd').onclick = () => checkUpdate(true);
 $('help').onclick = () => tour($('work').hidden ? 'start' : 'work');
-let workTourPending = !seen('tourWork');
+let workTourPending = !seen('tourWork2');
 const _render = render;
 render = function () {                     // first time the songs screen appears, run its tour
   _render();
   if (workTourPending && S.tracks.length) { workTourPending = false; setTimeout(() => tour('work'), 300); }
 };
-if (!seen('tourStart')) setTimeout(() => tour('start'), 300);
+if (!seen('tourStart2')) setTimeout(() => tour('start'), 300);
 
 render(); paintDrafts();
 async function checkUpdate(manual) {
