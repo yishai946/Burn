@@ -102,7 +102,11 @@ input[type=url]:focus{border-color:var(--accent)}
 
 /* work */
 .work{display:flex;flex-wrap:wrap;gap:22px;padding:22px 28px;align-items:flex-start}
-.side{flex:1 1 280px;max-width:360px;display:flex;flex-direction:column;gap:14px}
+.side{flex:1 1 100%;display:flex;flex-wrap:wrap;gap:14px;align-items:stretch}
+.side .pl{flex:0 1 360px;align-self:flex-start}
+.side .discs-card{flex:1 1 360px;min-width:0}
+#discs{display:flex;flex-wrap:wrap;gap:10px}
+#discs .disc{flex:1 1 220px;max-width:340px}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:12px}
 .card h2{font-size:15px;font-weight:700}
 .pl{flex-direction:row;align-items:center;gap:14px}
@@ -119,7 +123,7 @@ input[type=url]:focus{border-color:var(--accent)}
 .bar i{display:block;height:100%;background:var(--accent);border-radius:4px}
 .note{color:var(--muted);font-size:13px}
 
-.panel{flex:999 1 520px;min-width:0;background:var(--surface);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.panel{flex:1 1 100%;min-width:0;background:var(--surface);border:1px solid var(--line);border-radius:16px;overflow:hidden}
 .phbtns{display:flex;gap:8px}
 .shareimg{display:block;max-width:100%;max-height:36vh;margin:14px auto 0;border-radius:12px;border:1px solid var(--line)}
 .ph{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px;padding:18px 22px;border-bottom:1px solid var(--line)}
@@ -259,7 +263,7 @@ footer .status b{color:var(--text)}
 .burner-tour .driver-popover-arrow-side-bottom{border-bottom-color:var(--surface)}
 /* background queue popup, bottom-left */
 .queue{position:fixed;left:20px;bottom:20px;z-index:30;width:min(380px,calc(100vw - 40px));background:var(--surface);border:1px solid var(--line2);border-radius:16px;box-shadow:0 18px 44px rgba(0,0,0,.28);overflow:hidden}
-body.has-foot .queue{bottom:96px}
+body.has-foot .queue{display:none}  /* the songs screen shows the download itself */
 .queue.attn{border-color:var(--accent)}
 .qhead{width:100%;display:flex;align-items:center;gap:10px;padding:12px 16px;background:none;border-radius:0;text-align:start}
 .qhead svg{width:18px;height:18px;stroke:var(--accent);fill:none;stroke-width:2;flex:none}
@@ -296,6 +300,7 @@ body.has-foot .queue{bottom:96px}
 .qdiscs b{display:block;margin-top:8px}
 .qdiscs ol{margin:2px 0 0;padding-inline-start:22px;color:var(--muted)}
 .qdiscs .past{opacity:.5}
+.hopen{cursor:pointer}.hopen:hover{border-color:var(--line2);background:var(--surface2)}
 .hrow{display:flex;flex-direction:column;align-items:stretch;gap:4px;padding:12px;border-radius:10px;border:1px solid var(--line)}
 .htop{display:flex;align-items:center;justify-content:space-between;gap:8px}
 .htop b{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -390,12 +395,11 @@ body.has-foot .queue{bottom:96px}
         <div class="cover"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div>
         <div class="info"><b id="pname" class="ename" dir="auto" contenteditable="plaintext-only" spellcheck="false" role="textbox" aria-label="שם הדיסק" title="לחץ כדי לשנות את השם"></b><span id="pmeta"></span></div>
       </div>
-      <div class="card">
+      <div class="card discs-card">
         <h2>חלוקה לדיסקים</h2>
         <div id="discs"></div>
         <div class="note">שיר לא נחתך בין דיסקים — הסדר נשמר.</div>
       </div>
-      <button class="secondary" id="new" type="button">פלייליסט חדש</button>
     </aside>
 
     <section class="panel">
@@ -764,7 +768,6 @@ function navState() {
   document.querySelector('main').classList.toggle('fixed', page === 'home' && !S.tracks.length);
 }
 $('nav').onclick = e => { const b = e.target.closest('[data-nav]'); if (!b) return; if (S.tracks.length) closeList(); go(b.dataset.nav); };
-$('new').onclick = () => { closeList(); go('home'); };
 $('back').onclick = () => { closeList(); go(S.from); };  // back to the page the list came from
 
 // inline rename: Enter or leaving the field saves, Escape restores; an empty name keeps the old one
@@ -788,21 +791,16 @@ function paintRecent() {
     || '<div class="empty">עוד לא שלחת רשימות לצריבה.</div>';
 }
 const HST = { burned: ['נצרב', 'ok'], partial: ['נצרב חלקית', 'warn'], downloaded: ['הורד', 'ok'], cancelled: ['בוטל', 'muted'], failed: ['נכשל', 'bad'] };
-const DST = { burned: 'נצרב', cancelled: 'בוטל', failed: 'לא נצרב' };
-const songList = l => `<ol>${l.map(x => `<li dir="auto">${esc(x)}</li>`).join('')}</ol>`;
 function histRow(p, k) {
   const [label, cls] = HST[p.status] || HST.burned, discs = p.discs || [], nd = p.ndiscs || discs.length;
   const done = discs.filter(d => d.state === 'burned').length;
   const meta = [`<span dir="ltr">${esc(p.at || '')}</span>`, `${p.count} שירים`,
     nd > 1 ? (p.status === 'partial' ? `${done} מתוך ${nd} דיסקים נצרבו` : `${nd} דיסקים`) : '',
     p.fmt ? (p.fmt === 'mp3' ? 'MP3' : 'שמע') : ''].filter(Boolean).join(' · ');
-  const body = discs.map((d, n) => `<b>דיסק ${n + 1} · ${DST[d.state]}</b>${songList(d.songs)}`).join('')
-    + (p.songs?.length ? songList(p.songs) : '')
-    + (p.skipped?.length ? `<b>דולגו (${p.skipped.length})</b>${songList(p.skipped)}` : '');
-  return `<div class="hrow"><div class="htop"><b dir="auto">${esc(p.name)}</b><span class="hst ${cls}">${label}</span></div>
+  const open = p.tracks?.length || p.url;  // older entries kept no songs: only a link can bring them back
+  return `<div class="hrow${open ? ' hopen' : ''}" ${open ? `data-k="${k}" role="button" tabindex="0" title="פתח את השירים"` : ''}><div class="htop"><b dir="auto">${esc(p.name)}</b><span class="hst ${cls}">${label}</span></div>
     <span class="hmeta">${meta}</span>${p.msg ? `<span class="hmeta" dir="auto">${esc(p.msg)}</span>` : ''}
-    ${body ? `<details class="qdiscs"><summary>אילו שירים</summary>${body}</details>` : ''}
-    <div class="hbtns">${p.url ? `<button class="ghost" type="button" data-k="${k}">טען שוב</button>` : ''}<button class="ghost" type="button" data-rename="${k}">שנה שם</button><button class="ghost" type="button" data-del="${k}">מחק</button></div></div>`;
+    <div class="hbtns"><button class="ghost" type="button" data-rename="${k}">שנה שם</button><button class="ghost" type="button" data-del="${k}">מחק</button></div></div>`;
 }
 $('pprev').onclick = () => { page--; paintRecent(); };
 $('pnext').onclick = () => { page++; paintRecent(); };
@@ -824,7 +822,15 @@ $('rgrid').addEventListener('click', e => {
   });
   el.addEventListener('blur', () => el.contentEditable = 'false', { once: true });
 });
-$('rgrid').onclick = e => { const b = e.target.closest('button[data-k]'); if (b && recent[b.dataset.k].url) openUrl(recent[b.dataset.k].url); };
+// a history card opens the songs it had
+function openHist(e) {
+  const c = e.target.closest('.hrow[data-k]');
+  if (!c || e.target.closest('button, [contenteditable="plaintext-only"]') || (e.type === 'keydown' && e.key !== 'Enter')) return;
+  const p = recent[c.dataset.k];
+  if (p.tracks?.length) { takeList({ tracks: p.tracks.map(t => ({ ...t })), name: p.name, url: p.url }); S.from = 'history'; }
+  else openUrl(p.url).then(() => { if (S.tracks.length) S.from = 'history'; });
+}
+$('rgrid').onclick = openHist; $('rgrid').onkeydown = openHist;
 
 let toastT;
 function toast(text) { $('toast').textContent = text; $('toast').hidden = false; clearTimeout(toastT); toastT = setTimeout(() => $('toast').hidden = true, 3500); }
@@ -1032,6 +1038,9 @@ $('share').onclick = async () => {
 
 // ---- what's new: once after each update, with a short tour of it ----
 const NEWS = [  // [version, [[title, text, element]]], newest first
+  ['1.9.0', [['התראות במחשב', 'כש-Burner ברקע, תקבל התראה כשרשימה מוכנה לצריבה, כשדיסק נצרב או כששיר לא ירד, עם כפתור "צרוב" או "נסה שוב" ישר מההתראה.', ''],
+             ['פתיחה מההיסטוריה', 'לחיצה על רשימה בהיסטוריה פותחת אותה עם השירים שהיו בה.', '[data-nav="history"]'],
+             ['מסך שירים רחב', 'החלוקה לדיסקים עברה לשורה מעל השירים, וההורדה מוצגת ישר ברשימה במקום לחזור לבית.', '.discs-card']]],
   ['1.8.0', [['חיפוש אחד לכול', 'במסך הבית יש תיבה אחת: שירים, אלבומים, פלייליסטים מיוטיוב, או קישור מ־Spotify, Apple Music ויוטיוב.', '.search.home'],
              ['חיבור כמה פלייליסטים', 'בחרת אלבום או פלייליסט כשרשימה פתוחה? השירים שלו מתווספים אליה, חוץ ממה שכבר יש בה.', '.addbar'],
              ['עמודים בסרגל העליון', 'בית, רשימות שלא סיימת והיסטוריה הם עכשיו עמודים בסרגל העליון. ערכת הצבעים, העזרה והעדכונים הפכו לאייקונים.', '#nav']]],
@@ -1055,7 +1064,7 @@ async function whatsNew() {
     [['הראה לי', () => { close(); newsTour(items); }, true], ['סגור', close]]);
 }
 // each feature is shown on its own screen; with no list open, a sample list stands in for the songs screen
-const NEWS_SCREEN = { '#share': 'work', '.savehist': 'work', '.addbar': 'work', '[data-nav="history"]': 'start', '.search.home': 'start', '#nav': 'start' };
+const NEWS_SCREEN = { '#share': 'work', '.savehist': 'work', '.addbar': 'work', '[data-nav="history"]': 'start', '.search.home': 'start', '#nav': 'start', '.discs-card': 'work' };
 const DEMO = [['שיר לדוגמה', 'אמן', 214], ['Another Song', 'Artist', 187], ['עוד שיר', 'זמרת', 245]].map(([title, artist, s]) => ({ title, artist, ms: s * 1000 }));
 let demoSaved = null;
 function demoList(on) {
@@ -1102,8 +1111,11 @@ const enqueue = async only => {
   $('savehist').checked = true;  // off is a one-time choice, for this list only
   if (!r.ok) { modal('אי אפשר להוסיף לתור', r.msg, 0, [['אישור', close, true]]); return; }
   putDrafts(drafts().filter(x => x.id !== S.draft));  // sent to the queue: no longer unfinished
-  // the list now downloads in the background: free the screen for the next one
-  qOpen = true; S.tracks = []; S.order = []; render(); history(); go('home');
+  // stay on the list: it now shows each song downloading
+  qOpen = true; history();
+  const list = await pywebview.api.jobs(), j = list.find(x => x.id === r.id);
+  App.jobs(list);
+  if (j && !S.job) openJob(j);
 };
 $('burn').onclick = () => S.job ? burnJob(S.job) : enqueue(false);
 $('dlonly').onclick = () => enqueue(true);

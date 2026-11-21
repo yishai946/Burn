@@ -26,6 +26,7 @@ class Api:
         self._hold = False        # True while the user hasn't said what to do with lists from last time
         self._hidden = False      # window hidden: work goes on in the background
         self._quitting = False
+        self._toaster = None      # Windows notifications, set up on first use
         self._restore()
         threading.Thread(target=self._downloader, daemon=True).start()
 
@@ -464,6 +465,54 @@ class Api:
         self._next_id = max([j["id"] for j in self._jobs], default=0)
         self._hold = bool(self._jobs)
 
+    # --- Windows notifications: only when the user isn't looking at Burner ---
+    def _away(self):
+        if self._hidden:
+            return True
+        import ctypes
+        u = ctypes.WinDLL("user32")  # private instance: don't touch pywebview's ctypes prototypes
+        u.GetForegroundWindow.restype = ctypes.c_void_p
+        u.GetWindowThreadProcessId.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_ulong)]
+        pid = ctypes.c_ulong()
+        u.GetWindowThreadProcessId(u.GetForegroundWindow(), ctypes.byref(pid))
+        return pid.value != os.getpid()
+
+    def _notify(self, title, body, buttons=(), tag=None):
+        """buttons: (label, action) pairs; actions are burn:<id> or retry:<id>:<song title, empty for all>."""
+        try:
+            if not self._away():
+                return
+            from windows_toasts import InteractableWindowsToaster, Toast, ToastButton
+            if not self._toaster:  # Burner.App is the ID on Burner's Start-menu shortcut (installer)
+                self._toaster = InteractableWindowsToaster("Burner", notifierAUMID="Burner.App")
+            toast = Toast([title, body], on_activated=lambda a: self._toast_action(a.arguments or ""))
+            if tag:
+                toast.tag = tag  # a newer toast with the same tag replaces the old one
+            for label, action in buttons:
+                toast.AddAction(ToastButton(label, action))
+            self._toaster.show_toast(toast)
+        except Exception as e:
+            core.friendly_error(e)  # logged; a missing notification must never break the queue
+
+    def _toast_action(self, arg):
+        kind, _, rest = arg.partition(":")
+        if kind == "burn":
+            r = self.burn_job(int(rest))
+        elif kind == "retry":
+            job_id, _, title = rest.partition(":")
+            r = self.retry_job(int(job_id), title or None)
+        else:  # the toast itself was clicked
+            r = {"ok": True}
+        if kind not in ("burn", "retry") or not r["ok"]:
+            self._hidden = False
+            try:
+                self._window.show()
+                self._window.restore()
+                if not r["ok"]:
+                    self._window.evaluate_js(f"modal('לא אפשרי כרגע', {json.dumps(r['msg'], ensure_ascii=False)}, 0, [['אישור', close, true]])")
+            except Exception:
+                pass
+
     def _push(self):
         self._save()
         self._show_if_hidden()
@@ -508,9 +557,14 @@ class Api:
                         if not job["files"]:
                             job["state"] = "error"
                             job["msg"] = "אף שיר לא ירד." + (" הסיבה: " + job["skipped"][0].split(" – ", 1)[-1] if job["skipped"] else "")
+                            self._notify(f"{job['name']}: ההורדה נכשלה", job["msg"], [("נסה שוב", f"retry:{job['id']}:")])
                             return
                         if not job["only"]:
                             self._plan(job)
+                            n = len(job["discs"])
+                            self._notify(f"{job['name']} מוכנה לצריבה", "הכנס דיסק ריק ולחץ צרוב" + (f" · {n} דיסקים" if n > 1 else "")
+                                         + (f" · {len(job['skipped'])} שירים לא ירדו" if job["skipped"] else ""),
+                                         [("צרוב" + (" דיסק 1" if n > 1 else ""), f"burn:{job['id']}")])
                         break
                     i = todo[0]
                     t = job["tracks"][i]
@@ -534,6 +588,9 @@ class Api:
                 except Exception as e:
                     with self._lock:
                         job["skipped"].append(f"{t['title']} – {core.friendly_error(e)}")
+                    sk = job["skipped"]
+                    self._notify(f"השיר {t['title']} לא ירד" if len(sk) == 1 else f"{len(sk)} שירים לא ירדו", f"{job['name']} · {core.friendly_error(e)}",
+                                 [("נסה שוב", f"retry:{job['id']}:" + (t['title'] if len(sk) == 1 else ""))], tag=f"skip{job['id']}")
             if job["only"]:
                 self._export(job)
         except Exception as e:
@@ -578,7 +635,8 @@ class Api:
         try:
             core.log_job({"name": job["name"], "url": job["url"], "fmt": job["fmt"], "status": status,
                           "at": time.strftime("%Y-%m-%d %H:%M"), "count": len(job["tracks"]), "ndiscs": len(discs),
-                          "discs": discs, "songs": songs, "skipped": job["skipped"], "msg": job["msg"]})
+                          "discs": discs, "songs": songs, "skipped": job["skipped"], "msg": job["msg"],
+                          "tracks": job["tracks"]})  # so the card can reopen the list
         except Exception as e:
             core.friendly_error(e)  # logged; history is a record, it must not break the queue
 
@@ -594,6 +652,7 @@ class Api:
         for k, (t, p, _) in enumerate(job["files"], 1):
             shutil.move(p, os.path.join(out, os.path.splitext(core.disc_name(k, t))[0] + os.path.splitext(p)[1]))
         job["msg"] = f"נשמר בתיקייה {out}"
+        self._notify(f"{job['name']} ירדה", job["msg"])
         self._log(job, "downloaded")
         shutil.rmtree(job["tmp"], ignore_errors=True)
         job["tmp"], job["files"] = None, []
@@ -629,14 +688,18 @@ class Api:
             job["disc"] += 1
             if job["disc"] < len(job["discs"]):
                 job["state"] = "ready"  # waits for the next blank disc
+                self._notify(f"דיסק {job['disc']} מתוך {len(job['discs'])} נצרב", f"{job['name']} · הוצא את הדיסק והכנס דיסק ריק",
+                             [(f"צרוב דיסק {job['disc'] + 1}", f"burn:{job['id']}")])
             else:
                 job["state"] = "done"
                 self._log(job, "burned")
+                self._notify(f"{job['name']} נצרבה", f"{len(job['discs'])} דיסקים מוכנים" if len(job["discs"]) > 1 else "הדיסק מוכן")
                 with self._lock:
                     self._remove(job)  # burned lists leave the queue; the history keeps the record
         except Exception as e:
             job["state"] = "ready"  # the files are still here: the user can retry with another disc
             job["msg"] = "הצריבה נכשלה: " + core.friendly_error(e)
+            self._notify(f"{job['name']}: הצריבה נכשלה", core.friendly_error(e), [("נסה שוב", f"burn:{job['id']}")])
         finally:
             job["i"] = 0
             self._push()

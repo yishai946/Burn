@@ -16,7 +16,7 @@ echo Building Burner %VER%
 
 "%PY%" -m PyInstaller --noconfirm --clean --windowed --onedir --name Burner --icon "%CD%\icon.ico" ^
   --add-data "%CD%\index.html;." --add-data "%CD%\icon.ico;." --add-data "%CD%\vendor;vendor" --add-binary "%FF%;." ^
-  --collect-submodules yt_dlp --workpath "%TEMP%\burner-build" --specpath "%TEMP%\burner-build" --distpath "%CD%\dist" "%CD%\app.py" || exit /b 1
+  --collect-submodules yt_dlp --collect-submodules windows_toasts --collect-submodules winrt --workpath "%TEMP%\burner-build" --specpath "%TEMP%\burner-build" --distpath "%CD%\dist" "%CD%\app.py" || exit /b 1
 
 rem build check: song search, YouTube lookup and a real download with the bundled ffmpeg
 dist\Burner\Burner.exe --selftest
