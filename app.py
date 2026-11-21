@@ -53,6 +53,45 @@ class Api:
         except Exception:
             return None
 
+    def version(self):
+        return core.VERSION
+
+    def images(self, urls):
+        """Cover art as data: URLs for the share image (a canvas can't export pictures from other sites). None where it failed."""
+        import base64, urllib.parse, urllib.request
+        from concurrent.futures import ThreadPoolExecutor
+        hosts = (".mzstatic.com", ".scdn.co", ".ytimg.com", ".spotifycdn.com")  # Apple, Spotify and YouTube artwork
+
+        def one(url):
+            host = urllib.parse.urlparse(url or "").hostname or ""
+            if not host.endswith(hosts):
+                return None
+            try:
+                r = urllib.request.urlopen(urllib.request.Request(url, headers=core.H), timeout=15, context=core.SSL)
+                return f"data:{r.headers.get_content_type() or 'image/jpeg'};base64," + base64.b64encode(r.read(2_000_000)).decode()
+            except Exception:
+                return None
+        with ThreadPoolExecutor(8) as ex:
+            return list(ex.map(one, urls))
+
+    def save_image(self, name, data_url):
+        """Save the share image (PNG) to Downloads and show it in Explorer."""
+        import base64, subprocess
+        if not data_url.startswith("data:image/png;base64,"):
+            return {"ok": False, "msg": "התמונה לא נוצרה כמו שצריך. נסה שוב."}
+        base = os.path.join(os.path.expanduser("~"), "Downloads", core.safe_name(name or "") or "Burner")
+        path, n = base + ".png", 1
+        while os.path.exists(path):
+            n += 1
+            path = f"{base} ({n}).png"
+        try:
+            with open(path, "wb") as f:
+                f.write(base64.b64decode(data_url.split(",", 1)[1]))
+            subprocess.Popen(["explorer", "/select,", path])
+        except Exception as e:
+            return {"ok": False, "msg": core.friendly_error(e)}
+        return {"ok": True, "path": path}
+
     def yt_audio(self, vid):
         """Preview of a YouTube song: a direct audio URL, or None."""
         if not core.re.fullmatch(r"[\w-]{11}", vid or ""):

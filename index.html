@@ -104,6 +104,8 @@ input[type=url]:focus{border-color:var(--accent)}
 .note{color:var(--muted);font-size:13px}
 
 .panel{flex:999 1 520px;min-width:0;background:var(--surface);border:1px solid var(--line);border-radius:16px;overflow:hidden}
+.phbtns{display:flex;gap:8px}
+.shareimg{display:block;max-width:100%;max-height:36vh;margin:14px auto 0;border-radius:12px;border:1px solid var(--line)}
 .ph{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px;padding:18px 22px;border-bottom:1px solid var(--line)}
 .ph h2{font-size:20px;font-weight:800}
 .sub{color:var(--muted);font-size:13px;margin-top:2px}
@@ -405,7 +407,7 @@ body.has-foot .queue{bottom:96px}
     <section class="panel">
       <div class="ph">
         <div><h2 id="ptitle">שירים לצריבה</h2><div class="sub" id="summary"></div></div>
-        <button class="ghost" id="all" type="button"></button>
+        <div class="phbtns"><button class="ghost" id="share" type="button" title="תמונה של הרשימה לשליחה">שתף</button><button class="ghost" id="all" type="button"></button></div>
       </div>
       <div class="addbar">
         <div class="search">
@@ -694,7 +696,7 @@ function render() {
   }
   $('rows').innerHTML = html;
   $('burn').innerHTML = DISC + `<span>${n > 1 ? `הורד והכן ${n} דיסקים` : 'הורד והכן לצריבה'}</span>`;
-  $('burn').disabled = $('dlonly').disabled = !n;
+  $('burn').disabled = $('dlonly').disabled = $('share').disabled = !n;
   $('dlonly').hidden = $('savehist').parentElement.hidden = !!S.job;
   const j = S.job && S.jobs.find(x => x.id === S.job);
   if (j) {  // a list from the queue: this button burns it once every song is down
@@ -922,6 +924,114 @@ async function poll() {
   renderQueue();  // burn buttons follow the drive state
 }
 
+// ---- share: the list drawn as an image to send (canvas, in the current theme) ----
+const HEB = /[֐-׿]/;
+function rrect(c, x, y, w, h, r) { c.beginPath(); c.roundRect(x, y, w, h, r); }
+function fit(c, s, w) { if (c.measureText(s).width <= w) return s; while (s && c.measureText(s + '…').width > w) s = s.slice(0, -1); return s + '…'; }
+function text(c, s, x, y, w, align = 'right') { c.direction = HEB.test(s) ? 'rtl' : 'ltr'; c.textAlign = align; c.fillText(fit(c, s, w), x, y); }
+function picture(c, im, x, y, w, h, r, bg) {  // cover-fit, like object-fit: cover
+  c.save(); rrect(c, x, y, w, h, r); c.clip();
+  if (im) { const k = Math.max(w / im.width, h / im.height), sw = w / k, sh = h / k; c.drawImage(im, (im.width - sw) / 2, (im.height - sh) / 2, sw, sh, x, y, w, h); }
+  else { c.fillStyle = bg; c.fillRect(x, y, w, h); }
+  c.restore();
+}
+const loadImg = src => new Promise(r => { if (!src) return r(null); const im = new Image(); im.onload = () => r(im); im.onerror = () => r(null); im.src = src; });
+
+async function drawList() {
+  const idx = selected(), discs = plan(idx), full = S.cap + (S.fmt === 'mp3' ? 0 : 60), tracks = idx.map(i => S.tracks[i]);
+  const css = getComputedStyle(document.documentElement), v = n => css.getPropertyValue(n).trim(), font = getComputedStyle(document.body).fontFamily;
+  // artwork comes through Python: pictures from other sites would block exporting the canvas
+  const arts = await pywebview.api.images([tracks.find(t => t.art)?.art || null, ...tracks.map(t => t.art || null)]);
+  const [coverImg, ...artImgs] = await Promise.all(arts.map(loadImg));
+  await document.fonts.ready;
+  const W = 1080, P = 48, ROW = 96, SEP = discs.length > 1 ? 64 : 0, DH = 72, headH = 236 + discs.length * DH;
+  const H = P + headH + 24 + discs.length * SEP + tracks.length * ROW + 72;
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const c = cv.getContext('2d'); c.textBaseline = 'alphabetic';
+  c.fillStyle = v('--bg'); c.fillRect(0, 0, W, H);
+  // summary card: cover, name, totals, one bar per disc
+  c.fillStyle = v('--surface'); rrect(c, P, P, W - 2 * P, headH, 28); c.fill(); c.strokeStyle = v('--line'); c.lineWidth = 2; c.stroke();
+  const cx = W - P - 36 - 156, cy = P + 36;
+  picture(c, coverImg, cx, cy, 156, 156, 20, v('--surface2'));
+  const tx = cx - 28, tw = tx - P - 36, total = idx.reduce((a, i) => a + secs(i), 0);
+  c.fillStyle = v('--text'); c.font = `800 46px ${font}`; text(c, S.name, tx, cy + 66, tw);
+  c.fillStyle = v('--muted'); c.font = `500 26px ${font}`;
+  text(c, `${tracks.length} שירים · ${fmt(total)} · ${discWord(discs.length)} · ${S.fmt === 'mp3' ? 'MP3' : 'דיסק שמע'}`, tx, cy + 112, tw);
+  const x0 = P + 36, x1 = W - P - 36;
+  discs.forEach((d, k) => {
+    const y = P + 236 + k * DH;
+    c.fillStyle = v('--text'); c.font = `700 24px ${font}`; text(c, `דיסק ${k + 1}`, x1, y, 300);
+    c.fillStyle = v('--muted'); c.font = `500 22px ${font}`; text(c, `${d.items.length} שירים · ⁦${fmt(d.used)} / ${fmt(full)}⁩`, x0, y, 520, 'left');  // isolate: keep "used / total" in order
+    c.fillStyle = v('--line2'); rrect(c, x0, y + 16, x1 - x0, 10, 5); c.fill();
+    const fw = Math.max(10, (x1 - x0) * Math.min(1, d.used / full));
+    c.fillStyle = v('--accent'); rrect(c, x1 - fw, y + 16, fw, 10, 5); c.fill();  // fills from the right, like the app
+  });
+  // the songs, numbered per disc
+  let y = P + headH + 24, n = 0;
+  discs.forEach((d, k) => {
+    if (SEP) { c.fillStyle = v('--accent'); c.font = `800 26px ${font}`; text(c, `דיסק ${k + 1}`, W - P - 16, y + 42, 300); y += SEP; }
+    d.items.forEach((i, p) => {
+      const t = S.tracks[i], mid = y + ROW / 2;
+      if (p) { c.fillStyle = v('--line'); c.fillRect(P + 16, y, W - 2 * P - 32, 2); }
+      c.fillStyle = v('--muted'); c.font = `600 24px ${font}`; text(c, String(p + 1), W - P - 16, mid + 9, 44);
+      const ax = W - P - 72 - 68;
+      picture(c, artImgs[n++], ax, mid - 34, 68, 68, 12, v('--surface2'));
+      const tx2 = ax - 24, tw2 = tx2 - P - 120;
+      c.fillStyle = v('--text'); c.font = `700 28px ${font}`; text(c, t.title, tx2, mid - 4, tw2);
+      c.fillStyle = v('--muted'); c.font = `500 22px ${font}`; text(c, t.artist, tx2, mid + 28, tw2);
+      c.font = `500 24px ${font}`; text(c, fmt(t.ms / 1000), P + 16, mid + 9, 110, 'left');
+      y += ROW;
+    });
+  });
+  c.fillStyle = v('--muted'); c.font = `600 20px ${font}`; c.direction = 'ltr'; c.textAlign = 'center'; c.fillText('Burner', W / 2, H - 30);
+  return cv.toDataURL('image/png');
+}
+$('share').onclick = async () => {
+  const b = $('share'); if (b.disabled) return;
+  b.disabled = true; b.textContent = 'מכין…';
+  let url;
+  try { url = await drawList(); } finally { b.disabled = false; b.textContent = 'שתף'; }
+  const note = t => { $('mt').textContent = t; };
+  modal('שיתוף הרשימה', '', null, [
+    ['העתק תמונה', async () => {
+      try { await navigator.clipboard.write([new ClipboardItem({ 'image/png': await (await fetch(url)).blob() })]); note('הועתק. אפשר להדביק בווטסאפ עם Ctrl+V'); }
+      catch (e) { note('ההעתקה לא הצליחה. שמור את התמונה במקום.'); }
+    }, true],
+    ['שמור תמונה', async () => { const r = await pywebview.api.save_image(S.name, url); note(r.ok ? 'נשמר בתיקיית ההורדות' : r.msg); }],
+    ['סגור', close]]);
+  const img = new Image(); img.src = url; img.className = 'shareimg'; img.alt = 'תמונה של רשימת השירים'; $('mp').append(img);
+};
+
+// ---- what's new: once after each update, with a short tour of it ----
+const NEWS = [  // [version, [[title, text, element]]], newest first
+  ['1.7.0', [['שיתוף הרשימה', 'הכפתור "שתף" במסך השירים יוצר תמונה מעוצבת של הרשימה, להעתקה לווטסאפ או לשמירה בהורדות.', '#share']]],
+  ['1.6.0', [['שמור בהיסטוריה', 'צורבים לחבר? כבה את "שמור בהיסטוריה" למטה במסך השירים, והשירים לא יסומנו "כבר נצרב".', '#savehist'],
+             ['מחיקה מההיסטוריה', 'דיסק נהרס? מחק אותו מההיסטוריה, והשירים שלו כבר לא יסומנו "כבר נצרב".', '#hist'],
+             ['האזנה לפני הוספה', 'בהצעות החיפוש יש ▶ להאזנה לשיר לפני שמוסיפים אותו.', '.addbar'],
+             ['שירים מיוטיוב', 'שירים שיש רק ביוטיוב מופיעים בחיפוש עם התגית "יוטיוב". אפשר גם להדביק קישור מיוטיוב.', '.addbar']]],
+  ['1.5.0', [['רשימה מהתור', 'לחיצה על רשימה בתור פותחת אותה: רואים כל שיר יורד, ואפשר להוסיף, למחוק, לנסות שוב ולשנות סדר לפני הצריבה.', '#queue']]],
+];
+const vnum = s => String(s).split('.').reduce((a, x) => a * 1000 + (+x || 0), 0);
+async function whatsNew() {
+  const cur = await pywebview.api.version();
+  let last = null; try { last = localStorage.getItem('seenVersion'); } catch (e) {}
+  if (!last && seen('tourStart2')) last = '1.4.0';  // updated from a version before this window existed
+  try { localStorage.setItem('seenVersion', cur); } catch (e) {}
+  if (!last) return;  // a new install gets the full tour instead
+  const items = NEWS.filter(([ver]) => vnum(ver) > vnum(last) && vnum(ver) <= vnum(cur)).flatMap(x => x[1]);
+  if (!items.length) return;
+  modal(`מה חדש ב־Burner ${cur}`, items.map(([t, d]) => `• ${t}: ${d}`).join('\n\n'), null,
+    [['הראה לי', () => { close(); newsTour(items); }, true], ['סגור', close]]);
+}
+function newsTour(items) {  // a feature on a screen that isn't open is explained in the middle of the screen
+  const visible = sel => { const el = sel && document.querySelector(sel); return el && el.offsetParent !== null; };
+  window.driver.js.driver({
+    steps: items.map(([t, d, sel]) => visible(sel) ? step(sel, t, d, 'bottom') : { popover: { title: t, description: d } }),
+    showProgress: true, popoverClass: 'burner-tour', stagePadding: 6, stageRadius: 12,
+    nextBtnText: 'הבא', prevBtnText: 'הקודם', doneBtnText: 'סיום', progressText: '{{current}} מתוך {{total}}',
+  }).drive();
+}
+
 // ---- burning ----
 function modal(title, text, pct, buttons, done) {
   $('modal').style.display = 'flex'; $('mt').textContent = title; $('mp').textContent = text;
@@ -1049,6 +1159,8 @@ function tour(which) {
     visible('#banner') && step('#banner', 'שים לב', 'כאן תופיע אזהרה כשדיסק כמעט ריק, עם כמה דקות לבטל כדי לחסוך דיסק.', 'bottom'),
     step('#burn', 'הורדה וצריבה', 'לחיצה כאן מוסיפה את הרשימה לתור. השירים יורדים ברקע ואפשר להמשיך לעבוד. כשהרשימה מוכנה, היא מופיעה בחלון התור למטה משמאל: מכניסים דיסק ריק ולוחצים צרוב. אם יש כמה דיסקים, שם רואים אילו שירים בכל דיסק.', 'top'),
     step('#dlonly', 'רק להוריד', 'לא צריך דיסק? השירים יורדו לתיקייה בשם הרשימה בתוך "הורדות", ממוספרים לפי הסדר.', 'top'),
+    step('#share', 'שיתוף', 'יוצר תמונה מעוצבת של הרשימה, עם החלוקה לדיסקים, להעתקה לווטסאפ או לשמירה.', 'bottom'),
+    step('.savehist', 'שמור בהיסטוריה', 'צורבים לחבר? כבה את זה, והצריבה לא תירשם בהיסטוריה.', 'top'),
     step('#back', 'חזרה', 'חוזר למסך הקודם. אם שינית משהו ברשימה, היא נשמרת ותוכל להמשיך אותה מהמסך הראשי.', 'bottom'),
   ] : [
     { popover: { title: 'ברוך הבא ל־Burner', description: 'Burner צורב שירים לדיסק שמע שמתנגן בכל נגן: ברכב, במערכת או בדיסקמן. סיור קצר של כמה צעדים.' } },
@@ -1098,7 +1210,7 @@ window.addEventListener('unhandledrejection', e => {
   modal('משהו השתבש', 'הפעולה לא הצליחה. נסה שוב, ואם זה חוזר, סגור ופתח את Burner מחדש.', 0, [['סגור', close, true]]);
 });
 async function offerRestore() {
-  const r = await pywebview.api.restored(); if (!r.count) return;
+  const r = await pywebview.api.restored(); if (!r.count) return whatsNew();  // one window at a time; the news waits a run
   modal(r.count === 1 ? 'רשימה מהפעם הקודמת' : `${r.count} רשימות מהפעם הקודמת`,
     'Burner נסגר לפני שהתור הסתיים. השירים שכבר ירדו נשמרו, אפשר להמשיך מאיפה שזה עצר.' +
     (r.burning ? '\nצריבה שנעצרה באמצע תתחיל מחדש בדיסק ריק חדש.' : ''),
