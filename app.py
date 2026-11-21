@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import shutil
@@ -107,6 +108,17 @@ class Api:
         except Exception:
             return []
 
+    def rename_history(self, k, old, at, name):
+        """old/at: the row the page showed, so a list logged meanwhile can't shift the rename to another row."""
+        name = (name or "").strip()[:120]
+        if not name:
+            return {"ok": False, "msg": "השם לא יכול להיות ריק."}
+        try:
+            core.rename_log(k, old, at, name)
+        except Exception as e:
+            return {"ok": False, "msg": core.friendly_error(e)}
+        return {"ok": True}
+
     def status(self):
         return core.burner_status()
 
@@ -120,7 +132,7 @@ class Api:
             self._next_id += 1
             job = {"id": self._next_id, "name": name or "פלייליסט", "url": url, "fmt": "mp3" if fmt == "mp3" else "audio",
                    "tracks": tracks, "state": "queued", "i": 0, "n": len(tracks), "current": "", "skipped": [],
-                   "discs": [], "disc": 0, "msg": "", "files": [], "got": [], "tmp": None, "cancel": False, "only": bool(only), "logged": False}
+                   "discs": [], "disc": 0, "msg": "", "files": [], "tmp": None, "cancel": False, "only": bool(only), "logged": False, "pct": 0}
             self._jobs.append(job)
         self._push()
         self._wake.set()
@@ -210,6 +222,74 @@ class Api:
         self._push()
         return {"ok": True}
 
+    # --- changing a list that is already in the queue (before its first disc is burned) ---
+    EDITABLE = ("queued", "downloading", "ready", "error")
+    NO_EDIT = "אפשר לשנות את הרשימה רק לפני שהתחלת לצרוב אותה."
+
+    @staticmethod
+    def _skip_of(job, t):
+        return next((x for x in job["skipped"] if x.startswith(t["title"] + " – ")), None)
+
+    @staticmethod
+    def _has(job, t):
+        k = core._key(t)
+        return any(core._key(f[0]) == k for f in job["files"])
+
+    def _pending(self, job):
+        return [i for i, t in enumerate(job["tracks"]) if not self._has(job, t) and not self._skip_of(job, t)]
+
+    @staticmethod
+    def _sort(job):
+        order = {core._key(t): n for n, t in enumerate(job["tracks"])}
+        job["files"].sort(key=lambda f: order.get(core._key(f[0]), 0))
+
+    def _requeue(self, job):
+        """After a change: download what's missing, or re-split the discs if everything is here."""
+        if job["state"] not in ("ready", "error"):
+            return  # queued/downloading: the downloader picks the change up by itself
+        job.update(msg="", logged=False, discs=[])
+        if self._pending(job):
+            job["state"] = "queued"
+            self._wake.set()
+        elif job["files"]:
+            self._plan(job)
+        else:
+            job["state"] = "error"
+
+    def update_job(self, job_id, tracks):
+        """The editor sends the list's new songs, in order: added, removed or reordered."""
+        with self._lock:
+            job = self._job(job_id)
+            if not job or job["state"] not in self.EDITABLE or job["disc"]:
+                return {"ok": False, "msg": self.NO_EDIT}
+            if not tracks:
+                return {"ok": False, "msg": "לא נשארו שירים ברשימה. כדי לוותר עליה, לחץ בטל בחלון התור."}
+            keys = {core._key(t) for t in tracks}
+            for f in job["files"]:
+                if core._key(f[0]) not in keys:
+                    try:
+                        os.remove(f[1])
+                    except OSError:
+                        pass
+            job["files"] = [f for f in job["files"] if core._key(f[0]) in keys]
+            job["skipped"] = [x for x in job["skipped"] if any(x.startswith(t["title"] + " – ") for t in tracks)]
+            job["tracks"], job["n"] = tracks, len(tracks)
+            self._sort(job)
+            self._requeue(job)
+        self._push()
+        return {"ok": True}
+
+    def retry_job(self, job_id, title=None):
+        """Download skipped songs again (one by title, or all); songs already downloaded are kept."""
+        with self._lock:
+            job = self._job(job_id)
+            if not job or job["state"] not in self.EDITABLE or job["disc"]:
+                return {"ok": False, "msg": self.NO_EDIT}
+            job["skipped"] = [x for x in job["skipped"] if title is not None and not x.startswith(title + " – ")]
+            self._requeue(job)
+        self._push()
+        return {"ok": True}
+
     def busy(self):
         return any(j["state"] in ("downloading", "burning") for j in self._jobs)
 
@@ -228,14 +308,18 @@ class Api:
         self._save()
 
     def _snapshot(self):
-        keep = ("id", "name", "fmt", "only", "state", "i", "n", "current", "skipped", "disc", "msg")
+        keep = ("id", "name", "url", "fmt", "only", "state", "i", "n", "current", "skipped", "disc", "msg")
         return [{**{k: j[k] for k in keep}, "discs": len(j["discs"]),
                  "disc_songs": len(j["discs"][j["disc"]]) if j["disc"] < len(j["discs"]) else 0,
+                 "tracks": j["tracks"], "pct": j["pct"],
+                 "songs": [["done", ""] if self._has(j, t) else ["err", (self._skip_of(j, t) or "").split(" – ", 1)[-1]]
+                           if self._skip_of(j, t) else ["dl" if j["state"] == "downloading" and k == j["i"] else "wait", ""]
+                           for k, t in enumerate(j["tracks"])],
                  "disc_lists": [[f"{j['files'][k][0]['artist']} – {j['files'][k][0]['title']}" for k in d] for d in j["discs"]]}
                 for j in self._jobs]
 
     QUEUE = os.path.join(core.DATA, "queue.json")
-    SAVED = ("id", "name", "url", "fmt", "tracks", "state", "skipped", "discs", "disc", "msg", "files", "got", "tmp", "only", "logged")
+    SAVED = ("id", "name", "url", "fmt", "tracks", "state", "skipped", "discs", "disc", "msg", "files", "tmp", "only", "logged")
 
     def _save(self):
         with self._lock:
@@ -258,11 +342,10 @@ class Api:
         for j in saved:
             try:
                 j["files"] = [f for f in j["files"] if os.path.exists(f[1])]  # downloaded songs that are still on disk
-                j["got"] = [i for i in j["got"] if any(f[1].endswith(f"{i:03d}.wav") or f[1].endswith(f"{i:03d}.mp3") for f in j["files"])]
                 j.setdefault("only", False)  # queues saved before download-only existed
                 j.setdefault("logged", False)
-                j.update(i=0, n=len(j["tracks"]), current="", cancel=False, was_burning=j["state"] == "burning")
-                if j["state"] in ("downloading", "queued") or (j["state"] in ("ready", "burning") and len(j["got"]) + len(j["skipped"]) < j["n"]):
+                j.update(i=0, n=len(j["tracks"]), current="", cancel=False, pct=0, was_burning=j["state"] == "burning")
+                if j["state"] in ("downloading", "queued") or (j["state"] in ("ready", "burning") and self._pending(j)):
                     j["state"], j["discs"] = "queued", []
                 elif j["state"] == "burning":
                     j["state"] = "ready"
@@ -284,7 +367,8 @@ class Api:
                 pass  # window closing
 
     def _emit(self, **kw):
-        self._window.evaluate_js(f"App.progress({json.dumps(kw)})")
+        if self._window:
+            self._window.evaluate_js(f"App.progress({json.dumps(kw)})")
 
     def _downloader(self):
         """Downloads one list at a time, in the order they were added."""
@@ -305,49 +389,69 @@ class Api:
             job["tmp"] = os.path.join(core.DATA, "jobs", str(job["id"]))
         os.makedirs(job["tmp"], exist_ok=True)
         try:
-            for i, t in enumerate(job["tracks"]):
-                if i in job["got"] or any(x.startswith(t["title"] + " – ") for x in job["skipped"]):
-                    continue  # done before Burner was closed
-                if job["cancel"]:
-                    with self._lock:
+            while True:  # the list can change while it downloads, so pick the next missing song each time
+                with self._lock:
+                    if job["cancel"]:
                         self._log(job, "cancelled")
                         self._remove(job)
-                    return
-                job["i"], job["current"] = i, f"{t['artist']} – {t['title']}"
+                        return
+                    todo = self._pending(job)
+                    if not todo:
+                        self._sort(job)
+                        if not job["files"]:
+                            job["state"] = "error"
+                            job["msg"] = "אף שיר לא ירד." + (" הסיבה: " + job["skipped"][0].split(" – ", 1)[-1] if job["skipped"] else "")
+                            return
+                        if not job["only"]:
+                            self._plan(job)
+                        break
+                    i = todo[0]
+                    t = job["tracks"][i]
+                    job["i"], job["current"], job["pct"] = i, f"{t['artist']} – {t['title']}", 0
                 self._push()
+
+                def on_pct(p, k=f"{t['artist']}|{t['title']}".lower()):  # the page's keyOf()
+                    pct = round(p * 100)
+                    if pct - job["pct"] >= 3 or pct == 100:  # small steps only, the page redraws on each one
+                        job["pct"] = pct
+                        self._emit(phase="dl", id=job["id"], key=k, pct=pct)
+                # named by the song, not its place: places change when the list is edited
+                base = os.path.join(job["tmp"], hashlib.md5(core._key(t).encode()).hexdigest()[:12])
                 try:
-                    p = core.download_track(t, os.path.join(job["tmp"], f"{i:03d}"), "mp3" if mp3 else "audio")
-                    job["files"].append((t, p, os.path.getsize(p) if mp3 else core.wav_seconds(p)))
-                    job["got"].append(i)
+                    p = core.download_track(t, base, "mp3" if mp3 else "audio", on_pct)
+                    with self._lock:
+                        if any(core._key(x) == core._key(t) for x in job["tracks"]):
+                            job["files"].append((t, p, os.path.getsize(p) if mp3 else core.wav_seconds(p)))
+                        else:  # removed from the list while it downloaded
+                            os.remove(p)
                 except Exception as e:
-                    job["skipped"].append(f"{t['title']} – {core.friendly_error(e)}")
-            job["files"].sort(key=lambda f: next((n for n, t in enumerate(job["tracks"]) if t == f[0]), 0))
-            if not job["files"]:
-                job["state"] = "error"
-                job["msg"] = "אף שיר לא ירד." + (" הסיבה: " + job["skipped"][0].split(" – ", 1)[-1] if job["skipped"] else "")
-                return
+                    with self._lock:
+                        job["skipped"].append(f"{t['title']} – {core.friendly_error(e)}")
             if job["only"]:
                 self._export(job)
-                return
-            # split for the disc in the drive if there is one (not while it is burning), else a standard 80 min / 700MB disc
-            st = {}
-            if not self.busy_burning():
-                try:
-                    st = core.burner_status()
-                except Exception:
-                    st = {}
-            if mp3:
-                cap = st.get("cap_bytes") or 700 * 1024 * 1024 * 96 // 100
-            else:
-                cap = min(core.DEFAULT_CAP, st["cap_s"] - 60) if st.get("cap_s") else core.DEFAULT_CAP
-            job["discs"] = core.plan_discs([f[2] for f in job["files"]], cap, 0 if mp3 else core.GAP)
-            job["state"], job["current"], job["i"] = "ready", "", 0
         except Exception as e:
             job["state"], job["msg"] = "error", core.friendly_error(e)
         finally:
             if job["state"] == "error":
                 self._log(job, "failed")
             self._push()
+
+    def _plan(self, job):
+        """Split the downloaded songs into discs and mark the list ready.
+        Sized for the disc in the drive if there is one (not while it is burning), else a standard 80 min / 700MB disc."""
+        mp3 = job["fmt"] == "mp3"
+        st = {}
+        if not self.busy_burning():
+            try:
+                st = core.burner_status()
+            except Exception:
+                st = {}
+        if mp3:
+            cap = st.get("cap_bytes") or 700 * 1024 * 1024 * 96 // 100
+        else:
+            cap = min(core.DEFAULT_CAP, st["cap_s"] - 60) if st.get("cap_s") else core.DEFAULT_CAP
+        job["discs"] = core.plan_discs([f[2] for f in job["files"]], cap, 0 if mp3 else core.GAP)
+        job["state"], job["current"], job["i"] = "ready", "", 0
 
     def _log_cancel(self, job):
         """The user dropped a list that hadn't finished: cancelled, or partly burned if some discs were done."""
@@ -420,8 +524,8 @@ class Api:
             else:
                 job["state"] = "done"
                 self._log(job, "burned")
-                shutil.rmtree(job["tmp"], ignore_errors=True)
-                job["tmp"] = None
+                with self._lock:
+                    self._remove(job)  # burned lists leave the queue; the history keeps the record
         except Exception as e:
             job["state"] = "ready"  # the files are still here: the user can retry with another disc
             job["msg"] = "הצריבה נכשלה: " + core.friendly_error(e)

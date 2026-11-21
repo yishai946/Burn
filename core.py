@@ -21,7 +21,7 @@ try:  # Python's own CA list can miss current issuers (GitHub failed); certifi's
     SSL = ssl.create_default_context(cafile=certifi.where())
 except ImportError:
     SSL = ssl.create_default_context()
-VERSION = "1.4.0"             # bump for every release; build.bat tags the GitHub release with it
+VERSION = "1.5.0"             # bump for every release; build.bat tags the GitHub release with it
 REPO = "yishai946/Burn"        # GitHub repo whose releases the in-app updater checks
 FROZEN = getattr(sys, "frozen", False)  # running as the packaged Burner.exe
 RES = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))  # bundled files (index.html, ffmpeg.exe)
@@ -247,6 +247,15 @@ def log_job(entry):
     _save_history(h)
 
 
+def rename_log(k, old, at, name):
+    h = load_history()
+    e = h["log"][k] if 0 <= k < len(h["log"]) else None
+    if not e or e.get("name") != old or e.get("at") != at:
+        raise RuntimeError("ההיסטוריה השתנתה בינתיים. פתח אותה שוב ונסה שוב.")
+    e["name"] = name
+    _save_history(h)
+
+
 def mark_burned(tracks):
     songs = load_history()["songs"]
     for t in tracks:
@@ -306,9 +315,17 @@ def _clean(title):
 
 
 def _find_video(artist, title, ms):
+    # YouTube returns nothing for some phrasings (e.g. transliterated Hebrew), so fall back to other ones
+    artist = artist.split(",")[0]
+    inner = re.findall(r"[\(\[]([^)\]]+)[\)\]]", title)  # "Halev Sheli (הלב שלי)" -> the original-script name
+    queries = dict.fromkeys(q.strip() for q in [f"{artist} {_clean(title)}", *(f"{artist} {x}" for x in inner), f"{artist} {title}", _clean(title)])
+    cands = []
     with _ydl(extract_flat=True, skip_download=True) as y:
-        info = y.extract_info(f"ytsearch5:{artist.split(',')[0]} {_clean(title)}", download=False)
-    cands = [c for c in (info or {}).get("entries") or [] if c and c.get("id")]
+        for q in queries:
+            info = y.extract_info(f"ytsearch5:{q}", download=False)
+            cands = [c for c in (info or {}).get("entries") or [] if c and c.get("id")]
+            if cands:
+                break
     if not cands:
         raise RuntimeError("השיר לא נמצא ביוטיוב.")
     want = ms / 1000
@@ -317,8 +334,9 @@ def _find_video(artist, title, ms):
     return best["id"]
 
 
-def download_track(track, dest_base, fmt="audio"):
-    """Download one track: fmt "audio" -> 44.1kHz 16-bit stereo WAV, "mp3" -> tagged CBR MP3. Returns the path."""
+def download_track(track, dest_base, fmt="audio", on_pct=None):
+    """Download one track: fmt "audio" -> 44.1kHz 16-bit stereo WAV, "mp3" -> tagged CBR MP3. Returns the path.
+    on_pct(0..1) is called as the audio downloads."""
     vid = _find_video(track["artist"], track["title"], track["ms"])
     if fmt == "mp3":  # ID3v2.3 tags: what car stereos show; many can't read the newer v2.4
         ext, pp = "mp3", {"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": str(MP3_KBPS)}
@@ -326,8 +344,12 @@ def download_track(track, dest_base, fmt="audio"):
     else:
         ext, pp = "wav", {"key": "FFmpegExtractAudio", "preferredcodec": "wav"}
         args = ["-ar", "44100", "-ac", "2", "-sample_fmt", "s16"]
+    def hook(d):
+        total = d.get("total_bytes") or d.get("total_bytes_estimate")
+        if on_pct and d.get("status") == "downloading" and total:
+            on_pct(min(1, d.get("downloaded_bytes", 0) / total))
     try:
-        with _ydl(format="bestaudio/best", noplaylist=True, outtmpl=dest_base + ".%(ext)s",
+        with _ydl(format="bestaudio/best", noplaylist=True, outtmpl=dest_base + ".%(ext)s", progress_hooks=[hook],
                   postprocessors=[pp], postprocessor_args={"ffmpeg": args}) as y:
             y.download([f"https://www.youtube.com/watch?v={vid}"])
     except Exception as e:

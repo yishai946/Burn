@@ -248,6 +248,14 @@ body.has-foot .queue{bottom:96px}
 .queue:not(.open) .qlist{display:none}
 .qjob{display:flex;flex-direction:column;gap:6px;padding:12px;border-radius:12px;background:var(--surface2);border:1px solid var(--line)}
 .qjob.s-ready{border-color:var(--accent)}
+.qjob[data-job]{cursor:pointer} .qjob[data-job]:hover{background:var(--surface)}
+.qjob .qwarn{color:var(--warn);font-weight:600}
+.dls{width:18px;height:18px;flex:none;border-radius:50%;display:grid;place-items:center;font-size:12px}
+.dls.pie{background:conic-gradient(var(--accent) var(--p,0%),var(--line2) 0)}
+.dls.wait{border:1.5px dashed var(--line2)}
+.dls.ok{background:var(--ok-bg);color:var(--ok)}
+.dls.err{width:auto;border-radius:8px;padding:2px 8px;border:1px solid var(--bad);color:var(--bad);background:none;cursor:pointer;font:inherit;font-size:13px}
+.tr.dlnow{background:var(--surface2);box-shadow:inset 3px 0 0 var(--accent)}
 .qjob.s-error .qtext{color:var(--bad)}
 .qtop{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
 .qtop b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -272,6 +280,8 @@ body.has-foot .queue{bottom:96px}
 .hst{flex:none;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:700;border:1px solid currentColor}
 .hst.ok{color:var(--ok)} .hst.warn{color:var(--warn)} .hst.bad{color:var(--bad)} .hst.muted{color:var(--muted)}
 .hbtns{display:flex;gap:8px;margin-top:4px}
+.ename{cursor:text;border-radius:4px;outline:1px dashed transparent;outline-offset:2px}
+.ename:hover,.ename:focus{outline-color:var(--muted)}
 .hbtns button{height:34px;padding:0 14px;font-size:14px}
 .qbtns{display:flex;gap:6px;justify-content:flex-end}
 .qbtns:empty{display:none}
@@ -380,7 +390,7 @@ body.has-foot .queue{bottom:96px}
     <aside class="side">
       <div class="card pl">
         <div class="cover"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg></div>
-        <div class="info"><b id="pname" dir="auto"></b><span id="pmeta"></span></div>
+        <div class="info"><b id="pname" class="ename" dir="auto" contenteditable="plaintext-only" spellcheck="false" role="textbox" aria-label="שם הדיסק" title="לחץ כדי לשנות את השם"></b><span id="pmeta"></span></div>
       </div>
       <div class="card">
         <h2>חלוקה לדיסקים</h2>
@@ -521,7 +531,7 @@ function putDrafts(d) {
   paintDrafts();
 }
 function saveDraft() {
-  if (!S.dirty) return;
+  if (!S.dirty || S.job) return;
   S.draft = S.draft || Date.now();
   putDrafts([{ id: S.draft, name: S.name, url: S.url, from: S.from, tracks: S.tracks, order: S.order, sel: [...S.sel],
     at: new Date().toLocaleString('he-IL', { dateStyle: 'short', timeStyle: 'short' }) }, ...drafts().filter(d => d.id !== S.draft)]);
@@ -575,12 +585,50 @@ const dur = s => `<span class="dur mono" dir="ltr">${fmt(s)}</span>`;
 const tag = t => t.burned ? `<span class="tag" dir="auto">${t.burned_in ? 'נצרב ב־' + esc(t.burned_in) : 'כבר נצרב'}</span>` : '';
 const discWord =n => n === 1 ? 'דיסק אחד' : `${n} דיסקים`;
 
+// ---- a list from the queue, opened in the songs screen ----
+S.job = null; S.jobSt = new Map(); let syncT;
+function dlState(t, [st, msg]) {
+  if (st === 'done') return '<span class="dls ok" title="ירד">✓</span>';
+  if (st === 'err') return `<button class="dls err" type="button" data-rt="${esc(t.title)}" title="${esc(msg)}">לא ירד · נסה שוב</button>`;
+  if (st === 'dl') return `<span class="dls pie" data-dl="${esc(keyOf(t))}" style="--p:${S.jobs.find(x => x.id === S.job)?.pct || 0}%" title="מוריד"></span>`;
+  return '<span class="dls wait" title="ממתין להורדה"></span>';
+}
+function openJob(j) {
+  stopPlay();
+  if (!S.job) S.fmtPrev = S.fmt;
+  Object.assign(S, { job: j.id, tracks: j.tracks.map(t => ({ ...t })), order: [...j.tracks.keys()], sel: new Set(j.tracks.keys()),
+    name: j.name, url: j.url, from: 'choose', fmt: j.fmt === 'mp3' ? 'mp3' : 'audio', draft: null, dirty: false });
+  jobStatus(j);
+  $('pname').textContent = S.name; noPreview.clear(); setCap(); setCover(); render();
+}
+function jobStatus(j) { S.jobSt = new Map(j.tracks.map((t, k) => [keyOf(t), j.songs[k]])); }
+function leaveJob() {
+  if (!S.job) return;
+  S.job = null; S.jobSt = new Map(); clearTimeout(syncT);
+  if (S.fmtPrev) { S.fmt = S.fmtPrev; S.fmtPrev = null; setCap(); }
+}
+async function syncJob() {
+  if (!S.job) return;
+  const r = await pywebview.api.update_job(S.job, selected().map(i => S.tracks[i]));
+  if (!r.ok) modal('לא אפשרי כרגע', r.msg, 0, [['אישור', close, true]]);
+}
+// burn a ready list; songs that didn't download are said out loud first
+async function burnJob(id) {
+  const j = S.jobs.find(x => x.id === id); if (!j) return;
+  const go = async () => { close(); const r = await pywebview.api.burn_job(id); if (!r.ok) modal('לא אפשרי כרגע', r.msg, 0, [['אישור', close, true]]); };
+  if (!j.skipped.length) return go();
+  modal(j.skipped.length === 1 ? 'שיר אחד לא ירד' : `${j.skipped.length} שירים לא ירדו`,
+    j.skipped.join('\n') + '\n\nהם לא ייצרבו לדיסק.', 0,
+    [['נסה להוריד שוב', async () => { close(); await pywebview.api.retry_job(id, null); }, true], ['צרוב בלעדיהם', go], ['ביטול', close]]);
+}
+
 function render() {
   const has = S.tracks.length > 0;
   $('start').hidden = has; $('work').hidden = !has; $('foot').hidden = !has;
   document.body.classList.toggle('has-foot', has);
-  if (!has) { S.draft = null; S.dirty = false; return; }
+  if (!has) { S.draft = null; S.dirty = false; leaveJob(); return; }
   saveDraft();
+  if (S.job && S.dirty) { S.dirty = false; clearTimeout(syncT); syncT = setTimeout(syncJob, 400); }
   const idx = selected(), discs = plan(idx), full = S.cap + (S.fmt === 'mp3' ? 0 : 60), n = discs.length;
   const total = idx.reduce((a, i) => a + secs(i), 0);
   $('pmeta').textContent = `${S.order.length} שירים · ${fmt(S.order.reduce((a, i) => a + secs(i), 0))}`;
@@ -611,12 +659,20 @@ function render() {
       const d = discs[cur = at[0]];
       html += `<div class="sep"><span>דיסק ${cur + 1}</span><div class="bar"><i style="width:${Math.min(100, d.used / full * 100)}%"></i></div><span class="mono" dir="ltr">${fmt(d.used)} / ${fmt(full)}</span></div>`;
     }
-    html += `<div class="tr drg ${at ? '' : 'off'}${t.burned ? ' burned' : ''}" draggable="true" data-i="${i}" role="checkbox" tabindex="0" aria-checked="${!!at}">
-      <span class="grip" aria-hidden="true">⋮⋮</span><span class="chk">${CHECK}</span><span class="n mono">${at ? at[1] + 1 : ''}</span>${meta(t)}${dup(i) ? '<span class="tag">כפול</span>' : ''}${tag(t)}${at ? '' : `<button class="del" type="button" data-d="${i}" aria-label="הסר מהרשימה" title="הסר מהרשימה"><svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button>`}${playBtn(i)}${dur(t.ms / 1000)}</div>`;
+    const st = S.job && S.jobSt.get(keyOf(t));
+    html += `<div class="tr drg ${at ? '' : 'off'}${t.burned ? ' burned' : ''}${st?.[0] === 'dl' ? ' dlnow' : ''}" draggable="true" data-i="${i}" role="checkbox" tabindex="0" aria-checked="${!!at}">
+      <span class="grip" aria-hidden="true">⋮⋮</span><span class="chk">${CHECK}</span><span class="n mono">${at ? at[1] + 1 : ''}</span>${st ? dlState(t, st) : ''}${meta(t)}${dup(i) ? '<span class="tag">כפול</span>' : ''}${tag(t)}${at ? '' : `<button class="del" type="button" data-d="${i}" aria-label="הסר מהרשימה" title="הסר מהרשימה"><svg viewBox="0 0 24 24"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button>`}${playBtn(i)}${dur(t.ms / 1000)}</div>`;
   }
   $('rows').innerHTML = html;
   $('burn').innerHTML = DISC + `<span>${n > 1 ? `הורד והכן ${n} דיסקים` : 'הורד והכן לצריבה'}</span>`;
   $('burn').disabled = $('dlonly').disabled = !n;
+  $('dlonly').hidden = !!S.job;
+  const j = S.job && S.jobs.find(x => x.id === S.job);
+  if (j) {  // a list from the queue: this button burns it once every song is down
+    const done = j.songs.filter(x => x[0] !== 'wait' && x[0] !== 'dl').length;
+    $('burn').innerHTML = DISC + `<span>${j.state === 'ready' ? (j.only ? 'מוכן' : `צרוב${j.discs > 1 ? ` דיסק ${j.disc + 1}` : ''}`) : j.state === 'error' ? 'נכשל' : `מוריד… ${done} מתוך ${j.n}`}</span>`;
+    $('burn').disabled = j.state !== 'ready' || !S.ready || j.only;
+  }
 }
 
 // click toggles a song, drag reorders it
@@ -628,6 +684,8 @@ const toggle = r => {
 };
 $('rows').addEventListener('click', e => {
   if (onPlay(e)) return;
+  const rt = e.target.closest('[data-rt]');
+  if (rt) { e.stopPropagation(); pywebview.api.retry_job(S.job, rt.dataset.rt); return; }
   const d = e.target.closest('.del');
   if (d) { const i = +d.dataset.d; S.order = S.order.filter(x => x !== i); S.sel.delete(i); S.dirty = true; render(); return; }
   const r = e.target.closest('.tr'); if (r) toggle(r);
@@ -680,6 +738,14 @@ function go(page) {
 }
 $('start').addEventListener('click', e => { const b = e.target.closest('[data-go]'); if (b) go(b.dataset.go); });
 
+// inline rename: Enter or leaving the field saves, Escape restores; an empty name keeps the old one
+function editName(el, save) {
+  const old = el.textContent;
+  el.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); el.blur(); } else if (e.key === 'Escape') { el.textContent = old; el.blur(); } };
+  el.onblur = () => { const v = el.textContent.trim(); el.textContent = v || old; if (v && v !== old) save(v); };
+}
+$('pname').onfocus = () => editName($('pname'), v => { S.name = v; S.dirty = true; });
+
 let recent = [], page = 0;
 const PAGE = 8;
 async function history() { recent = await pywebview.api.history(); page = 0; paintRecent(); }
@@ -707,10 +773,20 @@ function histRow(p, k) {
   return `<div class="hrow"><div class="htop"><b dir="auto">${esc(p.name)}</b><span class="hst ${cls}">${label}</span></div>
     <span class="hmeta">${meta}</span>${p.msg ? `<span class="hmeta" dir="auto">${esc(p.msg)}</span>` : ''}
     ${body ? `<details class="qdiscs"><summary>אילו שירים</summary>${body}</details>` : ''}
-    ${p.url ? `<div class="hbtns"><button class="ghost" type="button" data-k="${k}">טען שוב</button></div>` : ''}</div>`;
+    <div class="hbtns">${p.url ? `<button class="ghost" type="button" data-k="${k}">טען שוב</button>` : ''}<button class="ghost" type="button" data-rename="${k}">שנה שם</button></div></div>`;
 }
 $('pprev').onclick = () => { page--; paintRecent(); };
 $('pnext').onclick = () => { page++; paintRecent(); };
+$('rgrid').addEventListener('click', e => {
+  const b = e.target.closest('button[data-rename]'); if (!b) return;
+  const k = +b.dataset.rename, p = recent[k], el = b.closest('.hrow').querySelector('.htop b');
+  el.contentEditable = 'plaintext-only'; el.focus(); getSelection().selectAllChildren(el);
+  editName(el, async v => {
+    const r = await pywebview.api.rename_history(k, p.name, p.at, v);
+    if (r.ok) p.name = v; else { el.textContent = p.name; modal('לא אפשרי כרגע', r.msg, 0, [['אישור', close, true]]); }
+  });
+  el.addEventListener('blur', () => el.contentEditable = 'false', { once: true });
+});
 $('rgrid').onclick = e => { const b = e.target.closest('button[data-k]'); if (!b || !recent[b.dataset.k].url) return; $('url').value = recent[b.dataset.k].url; go('link'); load(); };
 
 async function load() {
@@ -819,7 +895,7 @@ const enqueue = async only => {
   // the list now downloads in the background: free the screen for the next one
   qOpen = true; S.tracks = []; S.order = []; render(); history(); go('choose');
 };
-$('burn').onclick = () => enqueue(false);
+$('burn').onclick = () => S.job ? burnJob(S.job) : enqueue(false);
 $('dlonly').onclick = () => enqueue(true);
 
 // ---- background queue (bottom-left popup) ----
@@ -830,6 +906,7 @@ function jobLine(j) {
   const discOf = j.discs > 1 ? ` · דיסק ${j.disc + 1} מתוך ${j.discs}` : '';
   if (j.state === 'queued') return { text: `${j.n} שירים · ממתין שההורדה הקודמת תסתיים`, pct: 0 };
   if (j.state === 'downloading') return { text: `שיר ${j.i + 1} מתוך ${j.n} · ${j.current}`, pct: j.i / j.n * 100 };
+  if (j.state === 'ready' && j.skipped.length && !j.msg) return { text: `${j.skipped.length === 1 ? 'שיר אחד לא ירד ולא ייצרב' : j.skipped.length + ' שירים לא ירדו ולא ייצרבו'} · נסה שוב, או צרוב בלעדיהם`, pct: 100 };
   if (j.state === 'ready') return { text: j.msg || (S.ready ? `הכנס דיסק ריק${discOf} ולחץ צרוב` : `מחכה לדיסק ריק${discOf}`), pct: 100 };
   if (j.state === 'burning') return { text: j.fmt === 'mp3' ? `כותב ${j.disc_songs} שירים${discOf} · אל תוציא את הדיסק`
     : `שיר ${j.i + 1} מתוך ${j.disc_songs}${discOf} · אל תוציא את הדיסק`, pct: j.fmt === 'mp3' ? 50 : j.i / Math.max(1, j.disc_songs) * 100 };
@@ -850,8 +927,9 @@ function renderQueue() {
   $('qlist').innerHTML = jobs.map(j => {
     const l = jobLine(j);
     const canBurn = j.state === 'ready' && !burning;
-    const skipped = j.skipped.length ? `<details class="qskip"><summary>${j.skipped.length === 1 ? 'שיר אחד דולג' : j.skipped.length + ' שירים דולגו'}</summary>${j.skipped.map(x => `<div>${esc(x)}</div>`).join('')}</details>` : '';
-    return `<div class="qjob s-${j.state}">
+    const skipped = j.skipped.length ? `<details class="qskip"${j.state === 'ready' ? ' open' : ''}><summary class="qwarn">⚠ ${j.skipped.length === 1 ? 'שיר אחד דולג' : j.skipped.length + ' שירים דולגו'}</summary>${j.skipped.map(x => `<div>${esc(x)}</div>`).join('')}</details>` : '';
+    const open = ['queued', 'downloading', 'ready', 'error'].includes(j.state) && !j.disc;
+    return `<div class="qjob s-${j.state}"${open ? ` data-job="${j.id}" title="לחץ כדי לראות ולשנות את השירים"` : ''}>
       <div class="qtop"><b dir="auto">${esc(j.name)}</b><span class="qtag">${j.fmt === 'mp3' ? 'MP3' : 'שמע'} · ${j.only && j.state === 'done' ? 'הורד' : STATE[j.state]}</span></div>
       <div class="qtext" dir="auto">${esc(l.text)}</div>
       ${j.state === 'done' || j.state === 'error' ? '' : `<div class="bar"><i style="width:${Math.min(100, l.pct)}%"></i></div>`}
@@ -860,14 +938,22 @@ function renderQueue() {
         `<div class="${k < j.disc ? 'past' : ''}"><b>דיסק ${k + 1}${k < j.disc ? ' · נצרב' : k === j.disc ? ' · הבא בתור' : ''}</b><ol>${d.map(x => `<li dir="auto">${esc(x)}</li>`).join('')}</ol></div>`).join('')}</details>` : ''}
       <div class="qbtns">
         ${canBurn ? `<button class="primary" type="button" data-burn="${j.id}" ${S.ready ? '' : 'disabled'}>צרוב${j.discs > 1 ? ` דיסק ${j.disc + 1}` : ''}</button>` : ''}
+        ${(j.state === 'ready' || j.state === 'error') && !j.disc && j.skipped.length ? `<button class="ghost" type="button" data-retry="${j.id}">נסה שוב את הדולגים</button>` : ''}
         ${j.state === 'burning' ? '' : `<button class="ghost" type="button" data-cancel="${j.id}">${j.state === 'done' || j.state === 'error' ? 'הסר' : 'בטל'}</button>`}
       </div></div>`;
   }).join('');
 }
 $('qtoggle').onclick = () => { qOpen = !qOpen; renderQueue(); };
 $('qlist').addEventListener('click', async e => {
-  const b = e.target.closest('button'); if (!b) return;
-  const r = b.dataset.burn ? await pywebview.api.burn_job(+b.dataset.burn) : await pywebview.api.cancel_job(+b.dataset.cancel);
+  const b = e.target.closest('button');
+  if (!b) {  // the card itself: open its songs
+    const c = e.target.closest('.qjob[data-job]'), j = c && S.jobs.find(x => x.id === +c.dataset.job);
+    if (!j || e.target.closest('details')) return;
+    openJob(j); return;
+  }
+  const d = b.dataset, api = pywebview.api;
+  if (d.burn) return burnJob(+d.burn);
+  const r = d.retry ? await api.retry_job(+d.retry, null) : await api.cancel_job(+d.cancel);
   if (!r.ok) modal('לא אפשרי כרגע', r.msg, 0, [['אישור', close, true]]);
 });
 
@@ -885,6 +971,12 @@ jobs(list) {
   const key = l => l.map(j => j.id + j.state).join();
   const ended = list.length < S.jobs.length || key(list.filter(j => j.state === 'done' || j.state === 'error')) !== key(S.jobs.filter(j => j.state === 'done' || j.state === 'error'));
   S.jobs = list;
+  if (S.job) {
+    const j = list.find(x => x.id === S.job);
+    if (!j || j.disc || !['queued', 'downloading', 'ready', 'error'].includes(j.state)) {  // burned, burning or removed
+      leaveJob(); S.tracks = []; S.order = []; render(); go('choose');
+    } else { jobStatus(j); render(); }
+  }
   if (ended) history();  // a list finished, failed or was cancelled: refresh the history
   renderQueue();
 },
@@ -892,6 +984,7 @@ progress(p) {
   if (p.phase === 'update') modal('מוריד עדכון', `${p.pct}%`, p.pct, []);
   else if (p.phase === 'update_restart') modal('מתקין את העדכון', 'Burner ייסגר ויפתח מחדש בעוד רגע.', 100, []);
   else if (p.phase === 'update_error') modal('העדכון נכשל', p.msg, 0, [['סגור', close, true]]);
+  else if (p.phase === 'dl') { const el = S.job === p.id && document.querySelector(`[data-dl="${CSS.escape(p.key)}"]`); if (el) el.style.setProperty('--p', p.pct + '%'); }
   else if (p.phase === 'error') modal('משהו השתבש', p.msg, 0, [['סגור', close, true]]);
 }};
 
