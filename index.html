@@ -1005,7 +1005,7 @@ $('share').onclick = async () => {
 // ---- what's new: once after each update, with a short tour of it ----
 const NEWS = [  // [version, [[title, text, element]]], newest first
   ['1.7.0', [['שיתוף הרשימה', 'הכפתור "שתף" במסך השירים יוצר תמונה מעוצבת של הרשימה, להעתקה לווטסאפ או לשמירה בהורדות.', '#share']]],
-  ['1.6.0', [['שמור בהיסטוריה', 'צורבים לחבר? כבה את "שמור בהיסטוריה" למטה במסך השירים, והשירים לא יסומנו "כבר נצרב".', '#savehist'],
+  ['1.6.0', [['שמור בהיסטוריה', 'צורבים לחבר? כבה את "שמור בהיסטוריה" למטה במסך השירים, והשירים לא יסומנו "כבר נצרב".', '.savehist'],
              ['מחיקה מההיסטוריה', 'דיסק נהרס? מחק אותו מההיסטוריה, והשירים שלו כבר לא יסומנו "כבר נצרב".', '#hist'],
              ['האזנה לפני הוספה', 'בהצעות החיפוש יש ▶ להאזנה לשיר לפני שמוסיפים אותו.', '.addbar'],
              ['שירים מיוטיוב', 'שירים שיש רק ביוטיוב מופיעים בחיפוש עם התגית "יוטיוב". אפשר גם להדביק קישור מיוטיוב.', '.addbar']]],
@@ -1023,13 +1023,33 @@ async function whatsNew() {
   modal(`מה חדש ב־Burner ${cur}`, items.map(([t, d]) => `• ${t}: ${d}`).join('\n\n'), null,
     [['הראה לי', () => { close(); newsTour(items); }, true], ['סגור', close]]);
 }
-function newsTour(items) {  // a feature on a screen that isn't open is explained in the middle of the screen
-  const visible = sel => { const el = sel && document.querySelector(sel); return el && el.offsetParent !== null; };
-  window.driver.js.driver({
-    steps: items.map(([t, d, sel]) => visible(sel) ? step(sel, t, d, 'bottom') : { popover: { title: t, description: d } }),
+// each feature is shown on its own screen; with no list open, a sample list stands in for the songs screen
+const NEWS_SCREEN = { '#share': 'work', '.savehist': 'work', '.addbar': 'work', '#hist': 'start' };
+const DEMO = [['שיר לדוגמה', 'אמן', 214], ['Another Song', 'Artist', 187], ['עוד שיר', 'זמרת', 245]].map(([title, artist, s]) => ({ title, artist, ms: s * 1000 }));
+let demoSaved = null;
+function demoList(on) {
+  if (on && !demoSaved && !S.tracks.length) {
+    demoSaved = { name: S.name, url: S.url, from: S.from, draft: S.draft };
+    workTourPending = false;  // this is the news tour, not the songs screen's own
+    Object.assign(S, { tracks: DEMO, order: [0, 1, 2], sel: new Set([0, 1, 2]), name: 'רשימה לדוגמה', url: null, dirty: false, job: null });
+    $('pname').textContent = S.name; setCover(); render();
+  } else if (!on && demoSaved) {
+    Object.assign(S, demoSaved, { tracks: [], order: [], sel: new Set(), dirty: false }); demoSaved = null;
+    $('pname').textContent = S.name || ''; render();
+  }
+}
+function newsTour(items) {
+  const go = i => { const scr = NEWS_SCREEN[items[i]?.[2]]; if (scr) demoList(scr === 'work'); };
+  const d = window.driver.js.driver({
+    // a selector that isn't on screen (e.g. no history yet) gets its popover in the middle instead
+    steps: items.map(([t, desc, sel]) => step(sel || undefined, t, desc, 'bottom')),
     showProgress: true, popoverClass: 'burner-tour', stagePadding: 6, stageRadius: 12,
     nextBtnText: 'הבא', prevBtnText: 'הקודם', doneBtnText: 'סיום', progressText: '{{current}} מתוך {{total}}',
-  }).drive();
+    onNextClick: () => { const i = d.getActiveIndex() + 1; if (i >= items.length) return d.destroy(); go(i); d.moveNext(); },
+    onPrevClick: () => { const i = d.getActiveIndex() - 1; if (i < 0) return; go(i); d.movePrevious(); },
+    onDestroyed: () => demoList(false),
+  });
+  go(0); d.drive();
 }
 
 // ---- burning ----
