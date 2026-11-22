@@ -207,6 +207,32 @@ class Api:
         except Exception:
             return []
 
+    def history_tracks(self, k, name, at):
+        """The songs of a history entry. Older entries kept only "artist – title" lines: each one is looked up again."""
+        try:
+            e = core.load_history()["log"][k]
+            if e.get("name") != name or e.get("at") != at:
+                raise RuntimeError("ההיסטוריה השתנתה בינתיים. פתח אותה שוב ונסה שוב.")
+            if e.get("tracks"):
+                return {"ok": True, "tracks": e["tracks"]}
+            lines = [s for d in e.get("discs", []) for s in d.get("songs", [])] or e.get("songs", [])
+
+            def one(line):
+                artist, _, title = line.partition(" – ")
+                try:
+                    found = core.search_songs(f"{artist} {title}")
+                except Exception:
+                    found = []
+                same = lambda a, b: a.casefold().strip() == b.casefold().strip()
+                return (next((t for t in found if same(t["title"], title) and same(t["artist"], artist)), None)
+                        or next((t for t in found if same(t["artist"], artist)), None)
+                        or {"title": title, "artist": artist, "ms": 0})  # not found: the name is still enough to download it
+            from concurrent.futures import ThreadPoolExecutor
+            with ThreadPoolExecutor(8) as ex:
+                return {"ok": True, "tracks": list(ex.map(one, lines))}
+        except Exception as e:
+            return {"ok": False, "msg": core.friendly_error(e)}
+
     def rename_history(self, k, old, at, name):
         """old/at: the row the page showed, so a list logged meanwhile can't shift the rename to another row."""
         name = (name or "").strip()[:120]
